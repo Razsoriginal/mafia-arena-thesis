@@ -1,0 +1,14 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "model": "opencode/muse-spark-1.3-contributor-free",
+  "small_model": "opencode/muse-spark-1.3-contributor-free",
+  "instructions": ["AGENTS.md"],
+  "permission": {
+    "edit": "allow",
+    "bash": "allow",
+    "task": "allow",
+    "webfetch": "allow",
+    "websearch": "allow",
+    "todowrite": "allow"
+  }
+}

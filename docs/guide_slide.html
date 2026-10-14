@@ -1,0 +1,38 @@
+<!doctype html>
+<html><head><meta charset="utf-8">
+<title>Thesis 1-slide — Mafia Arena</title>
+<style>
+  body{font-family:Arial,Helvetica,sans-serif;background:#111;color:#111;margin:0;display:flex;align-items:center;justify-content:center;min-height:100vh}
+  .slide{background:#fff;width:960px;border-radius:12px;padding:28px 32px;box-shadow:0 8px 40px rgba(0,0,0,.4)}
+  h1{font-size:22px;margin:0 0 4px} .sub{font-size:13px;color:#555;margin-bottom:14px}
+  .flow{display:flex;align-items:stretch;gap:0;margin:14px 0}
+  .box{flex:1;border:2px solid #1a73e8;border-radius:10px;padding:10px 12px;background:#f4f8ff}
+  .box.warn{border-color:#e8711a;background:#fff6ef}
+  .box.green{border-color:#188038;background:#eff8f0}
+  .box h3{font-size:14px;margin:0 0 6px} .box ul{font-size:12px;margin:0;padding-left:16px}
+  .arrow{align-self:center;font-size:22px;padding:0 8px;color:#333}
+  .row{display:flex;gap:12px} .col{flex:1;background:#fafafa;border:1px solid #ddd;border-radius:8px;padding:8px 10px;font-size:12px}
+  .foot{font-size:11px;color:#555;margin-top:10px;border-top:1px solid #eee;padding-top:8px}
+  @media print{.slide{box-shadow:none} body{background:#fff}}
+</style></head>
+<body><div class="slide">
+  <h1>Exformation-Aware Dual-Process Agents: From Mafia Arena to Enterprise Safety</h1>
+  <div class="sub">MSc AI Part-2 (Mumbai Univ) • Raza Sayyed • Backbone: muse-spark-1.3-contributor • Independent replication inspired by Fractal Cerebral AIWILD'26</div>
+  <div class="flow">
+    <div class="box"><h3>1. Mafia Arena (7P)</h3><ul><li>2 mafia, doctor, detective, 3 villagers</li><li>Night → Discuss×2 → Vote (lynch irreversible)</li><li>Full logs → parquet</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box"><h3>2. DMN: Imagine</h3><ul><li>Hypothesise motives</li><li><b>Exformation:</b> unsaid / implied / omitted + who benefits</li><li>JSON + confidence</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box"><h3>3. TPN: Verify</h3><ul><li>Check vs votes/kills/quotes [turn ids]</li><li>Contradiction? Revised 0–1</li><li>Evidence spans only</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box warn"><h3>4. EVT Gate</h3><ul><li>Expectation vs Violation × Threat</li><li>If conf&lt;0.65 or risk&gt;0.6 → <b>DELAY</b></li><li>Vote <i>no-lynch</i> / ask-info</li></ul></div>
+    <div class="arrow">→</div>
+    <div class="box green"><h3>5. Act + Measure</h3><ul><li>ACCUSE / DEFEND / DELAY / VOTE</li><li>Win + ECE/Brier + cascade-resist + delay-quality + say-do-gap</li></ul></div>
+  </div>
+  <div class="row">
+    <div class="col"><b>Baselines (same backbone):</b> CoT-vote, ReAct, Constitution-only. 50 seeds × 4 agents = 200 games.</div>
+    <div class="col"><b>Novelty:</b> exformation field, EVT delay, say-do-gap metric, Mafia → Avalon + vendor-negotiation transfer.</div>
+    <div class="col"><b>Society:</b> calibrated delayers for Vaidya / banking / UPI agents — hold back when uncertain, resist scams & cascades.</div>
+  </div>
+  <div class="foot">Problem: say-do gap + cascades + hasty irreversible acts &nbsp;|&nbsp; All LLM via src/llm_client.py &nbsp;|&nbsp; Evidence: logs/games.parquet + logs/raw/ &nbsp;|&nbsp; Comparative later: gpt-4o-mini, qwen3-8b, Fathom-R1-14B (.env swap only)</div>
+</div></body></html>
