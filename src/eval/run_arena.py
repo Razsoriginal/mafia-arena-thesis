@@ -21,9 +21,21 @@ def _log_progress(run_id, seed, focal, gate, day, alive, winner):
                             "focal": focal, "gate": gate, "day": day,
                             "alive": alive, "winner": winner}) + "\n")
 
-def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None):
+def _make_game(seed, focal_role="random"):
+    """Role-balanced game: re-seed (bounded) until pid 0 has focal_role. Engine untouched."""
+    if focal_role == "random":
+        return Game(seed=seed), seed
+    for k in range(50):
+        s = seed + k * 1000
+        g = Game(seed=s)
+        if g.players[0].role == focal_role:
+            return g, s
+    return Game(seed=seed), seed  # fallback: record actual role
+
+
+def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"):
     run_id = run_id or f"{seed}-{focal}"
-    game = Game(seed=seed)
+    game, seed = _make_game(seed, focal_role)
     # assign: focal agent controls pid 0 (villager side forced for fair win-rate: rotate role by re-seeding until pid0 not mafia? MVP: keep random, record)
     agents = {}
     for p in game.players:
@@ -100,6 +112,8 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None):
                             "trust": trust_all.get(0, {}), "trace": traces.get(0, {})}
         _log_progress(run_id, seed, focal, gate, day, len(game.alive_ids()), game.winner)
     game.check_over()
+    if game.winner is None:
+        game.winner = "draw"  # max_days reached with no elimination (MVP timeout)
     return game
 
 def main():
@@ -108,6 +122,8 @@ def main():
     ap.add_argument("--agents", type=str, default="dmn_tpn,cot")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--gate", type=str, default="llm", choices=["llm", "jev"])
+    ap.add_argument("--focal-role", type=str, default="random",
+                    choices=["random", "villager", "mafia", "doctor", "detective"])
     ap.add_argument("--out", type=str, default="logs/games.parquet")
     args = ap.parse_args()
     focals = args.agents.split(",")
@@ -117,7 +133,8 @@ def main():
             focal = focal.strip()
             run_id = f"{args.seed+i}-{focal}"
             mark = dict(COST_LOG)
-            g = play_one(seed=args.seed + i * 100, focal=focal, gate=args.gate, run_id=run_id)
+            g = play_one(seed=args.seed + i * 100, focal=focal, gate=args.gate,
+                         run_id=run_id, focal_role=args.focal_role)
             dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
             dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
             lv = getattr(g, "_last_votes", {})
@@ -143,7 +160,7 @@ def main():
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     pd.DataFrame(rows).to_parquet(args.out, index=False)
     print(f"Saved {len(rows)} rows to {args.out}")
-    print(pd.DataFrame(rows)[["focal", "winner", "focal_role"]].value_counts())
+    print(pd.DataFrame(rows)[["focal", "winner", "focal_role"]].value_counts(dropna=False))
 
 if __name__ == "__main__":
     main()

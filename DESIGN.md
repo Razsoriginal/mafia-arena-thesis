@@ -1,14 +1,13 @@
 # Design Doc — Mafia Arena for Deception-Resistant Agents
-## Primary backbone: `muse-spark-1.3-contributor` (System-2) + Jev System-One gate + comparative layer later
+## Primary backbone: `meta/muse-spark-1.3-contributor` via AiCredits (System-2) + Jev `jev-1.13-free` via BeatAI System-One gate + comparative layer later
 
 ### 1. Why muse-spark-1.3-contributor for MVP
 * You chose it: high intelligence + very cheap cost. Ideal for multi-agent loops where 1 game = 7 agents x ~10 LLM calls = ~70 calls.
 * All agent code goes through `src/llm_client.py` with OpenAI-compatible interface, so backbone is a config switch, not code change.
-* MVP: run EVERYTHING (all roles, all baselines, our agent) on muse-spark-1.3-contributor for fair comparison.
+* MVP: run EVERYTHING (all roles, all baselines, our agent) on meta/muse-spark-1.3-contributor via AiCredits for fair comparison.
 * Later comparative layer (no code rewrite): swap `LLM_MODEL` to gpt-4o-mini / qwen3-8b / Fathom-R1-14B / llama-3.1-8b and re-run 10 seeds to test backbone-dependence.
 
-Estimated cost MVP (200 games x 70 calls x ~800 tokens avg):
-* muse-spark-1.3-contributor (cheap tier): ~11.2M tokens ≈ few dollars. If using OpenRouter free/contributor tier, near-zero.
+Measured cost 2026-10-14 (1 game, 5 days, ~100 events): 147k prompt + 69k completion ≈ Rs.2.7. This model reasons first (~95% of max_tokens can go to reasoning), so `LLM_MAX_TOKENS=1500` minimum or content comes back empty.
 * Keep `temperature=0.3` for dialogue, `temperature=0.0` for votes/trust JSON for reproducibility.
 
 ### 2. Architecture
@@ -24,7 +23,7 @@ src/
     base.py         # BaseAgent.act(dialogue, state) -> Action
     baselines.py    # CotAgent, ReactAgent, ConstitutionAgent
     dmn_tpn_agent.py# Our agent: DMN -> TPN -> EVT -> trust + DELAY gate
-    jev_gate.py     # Optional System-One gate: Jev choice/score/noul for calibrated DELAY (stub, --gate llm|jev)
+    jev_gate.py     # System-One gate: Jev noul/choice/score via BeatAI for calibrated DELAY (--gate llm|jev, 61s rate guard)
   safety/
     gate.py         # SafetyGate.check() + check_with_jev() — deterministic ALLOW/DELAY/ESCALATE core
     middleware.py   # guard() decorator + guard_tool() for enterprise tools
@@ -32,8 +31,9 @@ src/
     types.py        # ProposedAction / GateResult contracts
   eval/
     metrics.py      # win_rate, ECE/Brier, cascade_resistance, delay_quality, say_do_gap
-    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0
-logs/               # games.parquet, safety_audit.parquet, raw/history_*.parquet
+    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --gate llm|jev --focal-role villager
+    dashboard.py    # streamlit run src/eval/dashboard.py — status, costs, results, docs
+logs/               # games.parquet, progress.jsonl, safety_audit.parquet, raw/history_*.parquet
 docs/               # SYNOPSIS? no — SYNOPSIS.md at root; docs/: DESIGN? no — root; docs/guide_slide.*, enterprise_integration.md, related_work.md
 ```
 Docs index: `SYNOPSIS.md` (university), `DESIGN.md` (this file), `ROADMAP.md` (phases), `docs/related_work.md` (Ch.2 table), `docs/enterprise_integration.md` (safety framework + recalibration), `docs/guide_slide.*` (1-slide).
@@ -44,8 +44,8 @@ Loop:
 1. Night: mafia kill, doctor save, detective check (engine resolves, only results revealed to relevant role).
 2. Day discuss round 1+2: each alive player 1-2 sentence utterance via LLM.
 3. Trust query: each agent outputs `{"trust": {player_id: 0-1}, "commitment": "I will only vote with proof"}`.
-4. Vote: each agent outputs `{"vote": player_id | "no-lynch", "reason": ...}`. Majority lynches, else no-lynch (this enables DELAY).
-5. Win check: mafia win if mafia >= villagers; village wins if mafia eliminated.
+4. Vote: each agent outputs `{"vote": player_id | "no-lynch", "reason": ...}`. Strict majority of alive lynches, else no-lynch (this enables DELAY). Vote prompt delays only if no suspect stands out (tuned 2026-10-14; was delay-by-default, produced all-draw games).
+5. Win check: mafia win if mafia >= villagers; village wins if mafia eliminated. 5-day cap with no elimination is recorded as `"draw"`.
 
 Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 
@@ -60,14 +60,15 @@ Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 * Threat: cost of wrong lynch (1 if village majority, else 0.5).
 * LLM-gate (MVP): If max_revised_confidence < TAU (default 0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
 * Trust score = revised_confidence calibrated via Platt (fit later).
-* Jev-gate (Phase 2, System-One): same state sent to Jev (TypeSafe AI, Sept 2026) in parallel — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > 0.6` -> DELAY. 70-500ms, $0.25-0.42/M in, calibrated via RLCD, typed (no JSON breakage). Hybrid = muse-spark (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
+* Jev-gate (System-One, live): same state sent to Jev `jev-1.13-free` via BeatAI SystemOne in one round trip — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > 0.6` -> DELAY. Free tier ~1 success/min (61s process guard, stub fallback logged). Hybrid = muse-spark (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
 
 ### 5. Logging schema (parquet, data-engineer friendly)
-`games(game_id, seed, agent_mix, winner, num_days)`  
+`games(game_id, seed, focal, gate, winner[village|mafia|draw], days, focal_role, majority_correct, trust_json, trace_json, prompt_tokens, completion_tokens, est_cost_inr, jev_stub)`  
 `turns(game_id, day, phase, speaker_id, role_true, text, trust_json)`  
 `dmn_traces(game_id, day, agent_id, hypotheses_json, verified_json, evt_scores)`  
 `votes(game_id, day, voter_id, vote_target, is_delay, majority_correct)`  
 `safety_audit(action, target, actor, reversible, decision, noul, threat, confidence, backend, reason)` → `logs/safety_audit.parquet` via `src/safety/audit.py`
+`logs/progress.jsonl`: one line per game-day (run_id, day, alive, winner-so-far) for live monitoring.
 
 All LLM raw responses saved in `logs/raw/` for audit.
 
@@ -81,15 +82,18 @@ All LLM raw responses saved in `logs/raw/` for audit.
 ### 7. Comparative models + Jev plan (after MVP)
 | Phase | Model | Purpose |
 |---|---|---|
-| MVP | muse-spark-1.3-contributor | all results |
-| JEV | typesafe/jev-1.13 (System-One gate) | LLM-gate vs Jev-gate ablation: calibration, latency, cost; 10 games |
+| MVP | meta/muse-spark-1.3-contributor via AiCredits | all results |
+| JEV | jev-1.13-free via BeatAI SystemOne | LLM-gate vs Jev-gate ablation: calibration, latency, cost; 10 games |
 | C1 | gpt-4o-mini | cost/quality frontier |
 | C2 | qwen3-8b / llama-3.1-8b | open-weights check |
 | C3 | FractalAIResearch/Fathom-R1-14B | reasoning model, internal relevance |
-Run 10 seeds x 4 agents to show backbone-agnostic gain. No prompt change. Jev via OpenRouter, `JEV_API_KEY`, state+questions in one round trip.
+Run 10 seeds x 4 agents to show backbone-agnostic gain. No prompt change. `--focal-role` re-seeds (bounded) for role-balanced cells.
 
 ### 8. Risks
-* LLM cost blow-up -> cap max_tokens 300, 2 discuss rounds only.
+* LLM cost blow-up -> measured Rs.2.7/game (2026-10-14); 200-game MVP ≈ Rs.550. Cap history window / rounds before scaling if needed.
+* Reasoning-model empty content -> `LLM_MAX_TOKENS=1500` minimum; `chat_text()` is None-safe with retry.
+* All-delay draws -> vote prompt delays only without a standout suspect; timeout games recorded as `"draw"`, kept visible in summaries.
+* Jev rate limit (1 success/min free) -> 61s guard + auditable stub; top up BeatAI for dense `--gate jev` runs.
 * JSON breakage -> `chat_json()` with repair + fallback to no-lynch (safe default = DELAY). Jev-gate avoids this (typed by construction).
 * Non-reproducibility -> seeds + raw logs.
 * Jev hosted dependency (not open-source, text-only) -> keep LLM-gate MVP first; Jev as optional ablation with separate logs.

@@ -3,10 +3,10 @@
 ## About project
 MSc AI Part-2 thesis (Mumbai University) + Fractal data engineer side-project.
 Independent clean-room replication inspired by Fractal Cerebral AIWILD 2026 paper (DMN+TPN+EVT, Mafia game, exformation).
-No proprietary code/data. Primary backbone: `muse-spark-1.3-contributor` (cheap, high-intelligence, System-2). Jev System-One gate (`typesafe/jev-1.13`): choice/score/noul for calibrated DELAY. Comparative later: gpt-4o-mini, qwen3-8b, Fathom-R1-14B.
+No proprietary code/data. Primary backbone: `meta/muse-spark-1.3-contributor` via AiCredits (cheap, high-intelligence, System-2; needs `LLM_MAX_TOKENS=1500`). Jev System-One gate (`jev-1.13-free` via BeatAI SystemOne): choice/score/noul for calibrated DELAY, ~1 req/min free tier. Comparative later: gpt-4o-mini, qwen3-8b, Fathom-R1-14B.
 
 Docs: `SYNOPSIS.md` (university synopsis), `DESIGN.md` (architecture), `README.md` (quickstart), `ROADMAP.md` (phases), `docs/related_work.md` (Ch.2), `docs/enterprise_integration.md` (safety framework), `docs/guide_slide.*` (1-slide).
-Code: `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` gate/middleware/audit, `src/eval/` arena runner + metrics. Logs: `logs/games.parquet` + `logs/safety_audit.parquet` + `logs/raw/`.
+Code: `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` gate/middleware/audit, `src/eval/` arena runner + metrics + `dashboard.py` (`streamlit run src/eval/dashboard.py`). Logs: `logs/games.parquet` (tokens, `est_cost_inr`, `jev_stub`) + `logs/progress.jsonl` + `logs/safety_audit.parquet` + `logs/raw/`.
 
 ## How to work in opencode terminal
 - Default model is muse-spark-1.3-contributor-free. Keep responses short, factual, no emojis unless asked.

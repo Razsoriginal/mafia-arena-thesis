@@ -1,2 +1,6 @@
 {"ts": 1791999555.0118527, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 0, "alive": 6, "winner": null}
 {"ts": 1791999681.7683494, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 1, "alive": 6, "winner": null}
+{"ts": 1791999808.9145665, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 2, "alive": 6, "winner": null}
+{"ts": 1791999964.5042298, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 3, "alive": 6, "winner": null}
+{"ts": 1792000140.2297566, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 4, "alive": 6, "winner": null}
+{"ts": 1792046911.1901195, "run_id": "0-dmn_tpn", "seed": 0, "focal": "dmn_tpn", "gate": "llm", "day": 0, "alive": 6, "winner": null}

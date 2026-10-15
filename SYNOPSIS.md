@@ -17,10 +17,10 @@ This thesis independently re-implements this idea from public description, forma
 
 ### 2. Objectives
 1. Build an open 7-player text Mafia arena with full logging (utterances, claims, votes, kills, trust scores).
-2. Implement DMN+TPN+EVT agent using `muse-spark-1.3-contributor` as primary backbone (System-2 reasoning).
+2. Implement DMN+TPN+EVT agent using `meta/muse-spark-1.3-contributor` via AiCredits as primary backbone (System-2 reasoning).
 3. Compare against 3 baselines on same backbone: CoT-vote, ReAct, Constitution-only.
 4. Define and measure: win rate, calibrated trust (ECE/Brier), cascade resistance, delay quality, say-do gap.
-5. Add Jev System-One gate ablation (TypeSafe AI): muse-spark DMN/TPN + Jev choice/score/noul for calibrated DELAY; compare LLM-gate vs Jev-gate on latency, cost, calibration.
+5. Add Jev System-One gate ablation (BeatAI `jev-1.13-free`): muse-spark DMN/TPN + Jev choice/score/noul for calibrated DELAY; compare LLM-gate vs Jev-gate on latency, cost, calibration.
 6. Test transfer to Avalon (5-player) + 1 enterprise toy scenario (vendor negotiation with hidden incentive) without retraining.
 7. Release benchmark logs (≥50 games x 4 conditions = 200 games + 10-game Jev ablation) + evaluation code.
 
@@ -40,7 +40,7 @@ This thesis independently re-implements this idea from public description, forma
 
 **Phase 2 - Agent (Hybrid System-2 + System-1):**
 ```
-Dialogue history -> DMN (muse-spark): hypothesise motives + exformation (implied/unsaid, who benefits) [JSON]
+Dialogue history -> DMN (muse-spark via AiCredits): hypothesise motives + exformation (implied/unsaid, who benefits) [JSON]
 -> TPN (muse-spark): verify vs votes/kills/contradictions with evidence spans [JSON]
 -> EVT: Expectation (predicted vote) vs Violation (deviation) vs Threat (cost of wrong lynch)
    - LLM-gate (MVP): trust 0-1 + DELAY if max trust < tau
@@ -66,7 +66,7 @@ Dialogue history -> DMN (muse-spark): hypothesise motives + exformation (implied
 ### 8. References (starter)
 * AIWILD NeurIPS 2026 CFP; ICLR 2026 AIWILD proceedings (OS-Sentinel, AgentHallu).
 * SBSC (Singh et al. ICLR 2025), No Stress No Gain (VerifAI 2025), Fathom-DeepResearch (2509.24107), TRISHUL (2502.08226).
-* Jev TypeSafe AI: System-One model docs (choice/score/noul, RLCD calibration), OpenRouter typesafe/jev-1.13.
+* Jev: BeatAI SystemOne docs (choice/score/noul; `jev-1.13-free`, ~1 req/min free tier); TypeSafe AI System-One model family (RLCD calibration).
 * AvalonBench, Werewolf LLM papers, ToM in LLMs, calibration (ECE/Brier), abstention.
 * Neuroscience: DMN/TPN, exformation (Nørretranders), expectancy-violation theory; Kahneman System-1/2.
 

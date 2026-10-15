@@ -32,7 +32,7 @@ def vote_user(player_id, role, history, trust):
     return f"""You are Player {player_id} ({role}).
 History: {history}
 Your trust: {trust}
-Vote for a player id or "no-lynch" if evidence insufficient. Prefer delay when unsure and lynch is irreversible.
+Vote for a player id, or "no-lynch" only if no suspect stands out. Otherwise vote your strongest suspect: endless delay also loses games.
 JSON: {{"vote": "3", "reason": "..."}}"""
 
 TRUST_SYSTEM = "Output trust scores. Reply JSON only."

@@ -1,18 +1,18 @@
 # Roadmap — Mafia Arena Thesis (MSc AI Part-2)
 
-Backbone: `muse-spark-1.3-contributor` (System-2 DMN/TPN). Jev `typesafe/jev-1.13` (System-1 gate, Phase 3 only).
+Backbone: `meta/muse-spark-1.3-contributor` via AiCredits (System-2 DMN/TPN). Jev `jev-1.13-free` via BeatAI SystemOne (System-1 gate, live — `--gate llm|jev`).
 Rule: one variable per iteration. Every claim needs `logs/*.parquet` evidence.
 
 ## Phase 0 — Start (Week 1)
 1. `pip install -r requirements.txt`
-2. `Copy-Item .env.example .env` → set `LLM_API_KEY` for muse-spark.
-3. `/run-arena --games 2` → must produce `logs/games.parquet` + `logs/raw/`.
-4. Read 2 failures in `logs/raw/`. Tune one line in `src/mafia/prompts.py` only.
-Exit: 5 clean games, JSON failures fall back to `no-lynch`, no crashes.
+2. `Copy-Item .env.example .env` → set `LLM_API_KEY` (AiCredits) + `JEV_API_KEY` (BeatAI).
+3. `python -m src.eval.run_arena --games 2 --focal-role villager` → must produce `logs/games.parquet` + `logs/raw/` + `logs/progress.jsonl`.
+4. Read 2 failures in `logs/raw/`. Tune one line in `src/mafia/prompts.py` only (done 2026-10-14: vote delays only without standout suspect).
+Exit: 5 clean games, JSON failures fall back to `no-lynch`, timeouts recorded as `"draw"`, no crashes.
 
 ## Phase 1 — MVP (Weeks 2-6)
 - `python -m src.eval.run_arena --games 50 --agents dmn_tpn,cot,react,constitution --seed 0`
-- Same backbone for all. Freeze `src/mafia/engine.py`. Tune DMN exformation (2 unsaid points) + TPN evidence spans only.
+- Same backbone for all (`meta/muse-spark-1.3-contributor`). Freeze `src/mafia/engine.py`. Tune DMN exformation (2 unsaid points) + TPN evidence spans only.
 - Files: `src/agents/dmn_tpn_agent.py`, `src/mafia/prompts.py`, `logs/games.parquet`.
 Exit: 200 games. dmn_tpn beats baselines on win + delay-when-uncertain.
 
@@ -24,8 +24,8 @@ Loop: `/eval` → hypothesis → one edit → 5-game retest → keep/revert.
 Exit: Thesis Ch.4-5 table — win-rate, ECE, cascade-resistance, delay-quality, say-do-gap per agent.
 
 ## Phase 3 — Jev Brake (Weeks 11-13, 10 games)
-- Keep DMN/TPN on muse-spark. Gate via `src/agents/jev_gate.py` + `src/safety/gate.py`.
-- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>0.6` → DELAY.
+- Keep DMN/TPN on muse-spark. Gate via `src/agents/jev_gate.py` + `src/safety/gate.py` (`--gate jev`).
+- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>0.6` → DELAY. Free tier ~1 success/min (guarded, stub logged in `jev_stub`).
 - Compare LLM-gate vs Jev-gate: calibration delta, latency, cost, JSON error rate.
 Exit: Hybrid System-2+1 result. Thesis Ch.6. See `docs/enterprise_integration.md`.
 

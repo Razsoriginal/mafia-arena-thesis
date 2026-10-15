@@ -10,7 +10,7 @@ Pattern: agent proposes irreversible action → gate scores (trust/violation/thr
 from src.safety import SafetyGate, guard_tool, AuditLogger
 from src.safety.types import ProposedAction
 
-gate = SafetyGate(backend="llm")  # or backend="jev" with JEV_MODEL=typesafe/jev-1.13
+gate = SafetyGate(backend="llm")  # or backend="jev" with JEV_MODEL=jev-1.13-free (BeatAI)
 audit = AuditLogger("logs/safety_audit.parquet")
 
 def refund_order(order_id, amount):
