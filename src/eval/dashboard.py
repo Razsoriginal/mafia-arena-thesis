@@ -129,7 +129,11 @@ with tabs[0]:
     st.dataframe(list_outputs(), width="stretch")
 
 with tabs[1]:
-    st.subheader("Spend")
+    st.subheader("Spend — LLM via OpenRouter/AiCredits, Jev gate")
+    st.caption("LLM cost: AiCredits wallet (read-only) + manual calculation below "
+               "(OpenRouter :free models cost 0). "
+               "Jev uses OpenRouterJevAPIKey when set (no 1 req/min guard); "
+               "otherwise the legacy BeatAI free-tier guard applies.")
     if st.button("Check AiCredits wallet now"):
         w = aicredits_wallet()
         st.json(w)
@@ -161,6 +165,14 @@ with tabs[1]:
             st.info("Selected file has no cost columns (written before telemetry patch).")
     else:
         st.info("No logs/games*.parquet yet.")
+    st.subheader("Manual calculator (AiCredits rates)")
+    r_in = st.number_input("Input Rs./1M tokens", value=9.53, format="%.2f")
+    r_out = st.number_input("Output Rs./1M tokens", value=19.06, format="%.2f")
+    p = st.number_input("Prompt tokens", value=147183, step=1000)
+    c = st.number_input("Completion tokens", value=69310, step=1000)
+    st.metric("Estimated cost", f"Rs.{(p * r_in + c * r_out) / 1e6:.2f}")
+    st.caption("Defaults: catalog rates for meta/muse-spark-1.3-contributor (2026-10-14) "
+               "and the measured game-1 totals. Same formula as run_arena `est_cost_inr`.")
 
 with tabs[2]:
     st.subheader("Results")
@@ -203,10 +215,15 @@ with tabs[5]:
     st.json({
         "LLM": {"base_url": os.getenv("LLM_BASE_URL"), "model": os.getenv("LLM_MODEL"),
                 "api_key": _masked("LLM_API_KEY"), "max_tokens": os.getenv("LLM_MAX_TOKENS")},
-        "JEV": {"base_url": os.getenv("JEV_BASE_URL"), "model": os.getenv("JEV_MODEL"),
-                "api_key": _masked("JEV_API_KEY")},
+        "OpenRouter": {"model": os.getenv("OpenRouterModel"),
+                       "api_key": _masked("OpenRouterAPIKey")},
+        "JEV": {"base_url": os.getenv("OpenRouterJevBaseUrl") or os.getenv("JEV_BASE_URL"),
+                "model": os.getenv("OpenRouterJevModel") or os.getenv("JEV_MODEL"),
+                "api_key": (_masked("OpenRouterJevAPIKey") if os.getenv("OpenRouterJevAPIKey") else _masked("JEV_API_KEY")),
+                "min_interval": os.getenv("JEV_MIN_INTERVAL_S", "0 with new key, else 61"),
+                "jev_threshold": os.getenv("JEV_THRESHOLD", "0.6")},
         "thresholds": {"TAU_DELAY": os.getenv("TAU_DELAY"), "EVT_THRESHOLD": os.getenv("EVT_THRESHOLD"),
                        "temps": [os.getenv("LLM_TEMPERATURE_DIALOGUE"), os.getenv("LLM_TEMPERATURE_JSON")]},
     })
     st.caption("Last live-verified 2026-10-14: AiCredits chat_text/chat_json OK; "
-               "BeatAI systemone noul/choice/score OK (1 req/min limit).")
+               "BeatAI systemone noul/choice/score OK. Re-verify after the OpenRouter switch.")

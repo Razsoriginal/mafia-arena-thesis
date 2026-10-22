@@ -2,26 +2,31 @@
 Jev returns typed decisions, not text: choice / score / noul in 70-500ms.
 Use for EVT DELAY: noul=should-delay, choice=vote target, score=threat.
 
-Setup: set JEV_BASE_URL=https://api.beatapi.io/v1/systemone
-+ JEV_API_KEY (BeatAI key) + JEV_MODEL=jev-1.13-free
-(JEV_API_KEY falls back to LLM_API_KEY). Toggle: GATE=llm|jev, --gate flag.
-Falls back to neutral stub (no delay) on any error so arena runs without key.
-BeatAI allows ~1 successful call/min: a process-local guard skips HTTP and
-returns a stub when the last success was <61s ago.
+Setup: key precedence OpenRouterJevAPIKey > JEV_API_KEY > LLM_API_KEY;
+endpoint OpenRouterJevBaseUrl > JEV_BASE_URL (default BeatAI SystemOne);
+model OpenRouterJevModel > JEV_MODEL (default jev-1.13-free).
+Toggle: --gate llm|jev. Falls back to neutral stub (no delay) on any error
+so arena runs without key. The old BeatAI ~1 req/min guard is off when
+OpenRouterJevAPIKey is set; JEV_MIN_INTERVAL_S overrides either way.
 """
 import json
-import os
 import time
 
-JEV_MODEL = os.getenv("JEV_MODEL", "jev-1.13-free")
-JEV_BASE_URL = os.getenv("JEV_BASE_URL", "https://api.beatapi.io/v1/systemone")
+from src.config import settings
+
+# Re-exported for backward compatibility; source of truth is settings.
+JEV_MODEL = settings.jev_model
+JEV_BASE_URL = settings.jev_base_url
 
 _LAST_OK_TS = 0.0
-_MIN_INTERVAL_S = 61.0
+
+
+def _min_interval() -> float:
+    return settings.jev_min_interval
 
 
 def _jev_key() -> str:
-    return os.getenv("JEV_API_KEY") or os.getenv("LLM_API_KEY") or ""
+    return settings.jev_api_key or ""
 
 
 def _stub(reason: str = "", model: str | None = None) -> dict:
@@ -121,7 +126,7 @@ def jev_decide(state: str, alive_ids: list, model: str | None = None) -> dict:
         return _stub("missing JEV_API_KEY/LLM_API_KEY", use_model)
     global _LAST_OK_TS
     now = time.time()
-    if _LAST_OK_TS and now - _LAST_OK_TS < _MIN_INTERVAL_S:
+    if _min_interval() > 0 and _LAST_OK_TS and now - _LAST_OK_TS < _min_interval():
         return _stub(f"rate-limit guard: last ok {now - _LAST_OK_TS:.0f}s ago", use_model)
     try:
         options = list(alive_ids) + ["no-lynch"]

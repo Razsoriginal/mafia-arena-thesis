@@ -1,0 +1,36 @@
+{"ts": 1792058700.4086425, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"hypotheses\": [{\"suspect\": \"3\", \"motive"}
+{"ts": 1792058733.5839133, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"verified\": [{\"suspect\": \"3\", \"evidence_spans\": [], \"contradiction_found\": false, \"revised_confidence\": 0.0}]}"}
+{"ts": 1792058748.3504317, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No suspect stands out; all players gave similar non-committal statements with no leads on Player 4's killer\"}"}
+{"ts": 1792058755.5928557, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No suspect stands out yet; everyone has given similar non-committal statements with no leads on Player 4's killer\"}"}
+{"ts": 1792058764.525934, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No suspect stands out yet; everyone gave similar non-committal statements with no leads on Player 4's killer\"}"}
+{"ts": 1792058779.262709, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No suspect stands out yet; everyone has given similar non-committal statements with no leads on Player 4's killer\"}"}
+{"ts": 1792058792.084901, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No suspect stands out yet; everyone gave similar non-committal statements with no leads on Player 4's killer\"}"}
+{"ts": 1792058997.404594, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"hypotheses\": [{\"suspect\": \"2\", \"motive\": \"piggyback P0's push to drive a mislynch onto P5 while appearing cooperative\", \"exformation\": [\"P2 offered no original read,"}
+{"ts": 1792059057.269778, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"verified\": [{\"suspect\": \"2\", \"evidence_spans\": [3, 9, 22, 26, 27, 29, 30], \"contradiction_found\": false, \"revised_confidence\": 0.7}]}"}
+{"ts": 1792059092.435724, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"P2's instant pile-on to P5 after my prompt feels opportunistic/deflecting, trust is low\"}"}
+{"ts": 1792059184.5652668, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792059220.0147045, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"P2 pushed P5 hardest after P0's prompt then voted no-lynch with no explanation, that flip feels opportunistic and inconsistent\"}"}
+{"ts": 1792059230.1054127, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"P2 piled onto me right after P0's prompt then voted no-lynch with no explanation, feels opportunistic and deflecting\"}"}
+{"ts": 1792059258.1074505, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"P2 piled onto P5 right after P0 then voted no-lynch with no explanation, feels opportunistic and inconsistent\"}"}
+{"ts": 1792059549.7048004, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"5\", \"reason\": \"P5 went completely silent after P0 was killed and has been vague both days, which matches P6's concern and feels most suspicious right now\"}"}
+{"ts": 1792059591.0641024, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792059662.5144145, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792059797.1466246, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"5\", \"reason\": \"P5 went silent after P0 was killed and only claimed doctor now under pressure with no saves named, feels most suspicious\"}"}
+{"ts": 1792059808.8483367, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"3\", \"reason\": \"Kills continued after P2 lynch so mafia remains among final three, P6 was town-killed last night, and I know I am town doctor"}
+{"ts": 1792060042.707818, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792060058.7049134, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"verified\": []}"}
+{"ts": 1792060065.590623, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No evidence against any player yet, avoid day-0 mislynch\"}"}
+{"ts": 1792060084.7080693, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any player yet, avoid day-0 mislynch\"}"}
+{"ts": 1792060101.233049, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any specific player yet, all statements are generic shock and denials, avoid day-0 mislynch\"}"}
+{"ts": 1792060107.980984, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any player yet, avoid day-0 mislynch\"}"}
+{"ts": 1792060115.1264126, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any specific player yet, avoid day-0 mislynch\"}"}
+{"ts": 1792060317.666407, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792060326.9754665, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"verified\": []}"}
+{"ts": 1792060397.137767, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792060452.918133, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any specific player yet, all statements remain generic denials, avoid mislynch\"}"}
+{"ts": 1792060464.7425513, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any specific player yet, avoid mislynch\"}"}
+{"ts": 1792060477.6066635, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"no-lynch\", \"reason\": \"No credible evidence against any specific player yet, avoid mislynch\"}"}
+{"ts": 1792060676.7900882, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": ""}
+{"ts": 1792060708.4207077, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"Player 0 pressed Player 2 then was killed overnight,"}
+{"ts": 1792060732.5249226, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"Player 0 pressed Player 2 then was killed overnight, strongest pattern we have and we must vote today\"}"}
+{"ts": 1792060746.1609051, "fn": "chat_json", "model": "meta/muse-spark-1.3-contributor", "raw": "{\"vote\": \"2\", \"reason\": \"Player 0 pressed Player 2 then was killed overnight, strongest pattern we have and we must vote today\"}"}

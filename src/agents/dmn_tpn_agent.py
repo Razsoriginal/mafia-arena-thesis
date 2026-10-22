@@ -4,49 +4,84 @@ from src.mafia import prompts as P
 from src.config import settings
 from .base import BaseAgent
 
+COMMITMENT = "I will only vote with cited evidence (turn ids)."
+
+
 class DmnTpnAgent(BaseAgent):
     name = "dmn_tpn"
     def __init__(self, pid, backend: str = "llm"):
         super().__init__(pid)
         self.backend = backend  # llm | jev (EVT DELAY source)
         self._alive: list = []
-    def speak(self, role, history):
-        # Speak from verification-corrected plan (lightweight: 1 DMN call cached per day by caller)
-        return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history))
+        self._plan: str = ""  # cached by reason(), used by speak() same day
 
-    def reason(self, role, history, facts, alive):
+    def speak(self, role, history):
+        # Speak from the verification-corrected plan cached by reason().
+        return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history, plan=self._plan))
+
+    def reason(self, role, history, facts, alive, prev_majority=None, alive_roles=None):
         self._alive = list(alive)
         dmn = llm.chat_json(P.DMN_SYSTEM, P.dmn_user(self.pid, role, history, alive))
         tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts))
         verified = tpn.get("verified", [])
-        # EVT scores
-        max_conf = max([v.get("revised_confidence", 0) for v in verified], default=0)
-        # violation proxy: disagreement between top hypothesis and recent majority (computed by caller; simplified here)
-        violation = 1 - max_conf
-        threat = 0.8  # lynch is irreversible; caller can override
-        evt = violation * threat
-        delay = (max_conf < settings.tau_delay) or (evt > settings.evt_threshold)
-        trust = {}
+        conf_by_suspect = {}
         for v in verified:
-            # trust innocent = 1 - mafia confidence
             try:
-                trust[str(v["suspect"])] = round(1 - float(v.get("revised_confidence", 0)), 3)
+                conf_by_suspect[str(v["suspect"])] = float(v.get("revised_confidence", 0))
             except Exception:
                 pass
-        trace = {"dmn": dmn, "tpn": tpn, "max_conf": max_conf, "evt": evt, "delay": delay}
+        max_conf = max(conf_by_suspect.values(), default=0)
+        top_suspect = max(conf_by_suspect, key=conf_by_suspect.get, default=None)
+        # EVT: expectation (yesterday's majority) vs violation (deviation).
+        if prev_majority is None or top_suspect is None:
+            violation = 0.5
+        else:
+            violation = 0.2 if str(top_suspect) == str(prev_majority) else 0.7
+        # Threat: wrong-lynch cost grows as village approaches parity.
+        if alive_roles:
+            m = sum(1 for r in alive_roles.values() if r == "mafia")
+            o = max(1, len(alive_roles) - m)
+            threat = min(1.0, m / o)
+        else:
+            threat = 0.8  # legacy fallback when role counts unavailable
+        evt = violation * threat
+        delay = (max_conf < settings.tau_delay) or (evt > settings.evt_threshold)
+        # Trust for EVERY alive player (1 = innocent), default 0.5 unverified.
+        trust = {}
+        for pid in alive:
+            if str(pid) in conf_by_suspect:
+                trust[str(pid)] = round(1 - conf_by_suspect[str(pid)], 3)
+            else:
+                trust[str(pid)] = 0.5
+        self._plan = (f"Top suspect: {top_suspect} (confidence {max_conf:.2f}). "
+                      f"Delay={'yes' if delay else 'no'} (evt {evt:.2f}).")
+        trace = {"dmn": dmn, "tpn": tpn, "max_conf": max_conf,
+                 "top_suspect": top_suspect, "prev_majority": prev_majority,
+                 "violation": violation, "threat": threat, "evt": evt,
+                 "delay": delay, "commitment": COMMITMENT,
+                 "reason_cached_before_discussion": True}
         return trust, trace, delay
 
     def vote(self, role, history, trust, trace=None):
-        if trace and trace.get("delay"):
-            return "no-lynch", {"reason": "EVT delay: insufficient calibrated evidence", "trace": trace}
+        trace = trace if isinstance(trace, dict) else {}
+        jev_out = None
         if self.backend == "jev":
+            # Jev is the DELAY source: consult it even when the LLM EVT
+            # heuristic already favours delay.
             from .jev_gate import jev_decide, should_delay
 
             alive = self._alive or [str(t) for t in (trust or {})]
             state = f"role={role} history<<<{history[-3000:]}>>>"
             jev_out = jev_decide(state, alive)
-            if should_delay(jev_out, settings.evt_threshold):
-                return "no-lynch", {"reason": f"Jev DELAY: noul {jev_out['should_delay_noul']:.2f}", "trace": trace or {}, "jev": jev_out}
-            (trace or {})["jev"] = {k: v for k, v in jev_out.items() if k != "vote_probs"}
+            trace["jev"] = {k: v for k, v in jev_out.items() if k != "vote_probs"}
+            if should_delay(jev_out, settings.jev_threshold):
+                return "no-lynch", {"reason": f"Jev DELAY: noul {jev_out['should_delay_noul']:.2f}",
+                                    "trace": trace, "jev": jev_out,
+                                    "commitment": trace.get("commitment", COMMITMENT)}
+        elif trace.get("delay"):
+            return "no-lynch", {"reason": "EVT delay: insufficient calibrated evidence",
+                                "trace": trace, "commitment": trace.get("commitment", COMMITMENT)}
         d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust))
-        return str(d.get("vote", "no-lynch")), {"reason": d.get("reason", ""), "trace": trace or {}}
+        return str(d.get("vote", "no-lynch")), {"reason": d.get("reason", ""), "trace": trace,
+                                                "jev": jev_out,
+                                                "commitment": trace.get("commitment", COMMITMENT)}

@@ -25,7 +25,7 @@ Exit: Thesis Ch.4-5 table — win-rate, ECE, cascade-resistance, delay-quality, 
 
 ## Phase 3 — Jev Brake (Weeks 11-13, 10 games)
 - Keep DMN/TPN on muse-spark. Gate via `src/agents/jev_gate.py` + `src/safety/gate.py` (`--gate jev`).
-- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>0.6` → DELAY. Free tier ~1 success/min (guarded, stub logged in `jev_stub`).
+- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>JEV_THRESHOLD (0.6)` → DELAY. Unlimited `OpenRouterJevAPIKey` disables the old ~1 req/min guard; every stub still logged per call (`jev_stub`).
 - Compare LLM-gate vs Jev-gate: calibration delta, latency, cost, JSON error rate.
 Exit: Hybrid System-2+1 result. Thesis Ch.6. See `docs/enterprise_integration.md`.
 

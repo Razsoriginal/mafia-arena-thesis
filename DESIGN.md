@@ -23,7 +23,7 @@ src/
     base.py         # BaseAgent.act(dialogue, state) -> Action
     baselines.py    # CotAgent, ReactAgent, ConstitutionAgent
     dmn_tpn_agent.py# Our agent: DMN -> TPN -> EVT -> trust + DELAY gate
-    jev_gate.py     # System-One gate: Jev noul/choice/score via BeatAI for calibrated DELAY (--gate llm|jev, 61s rate guard)
+    jev_gate.py     # System-One gate: Jev noul/choice/score for calibrated DELAY (--gate llm|jev; OpenRouterJevAPIKey removes the old 61s guard)
   safety/
     gate.py         # SafetyGate.check() + check_with_jev() — deterministic ALLOW/DELAY/ESCALATE core
     middleware.py   # guard() decorator + guard_tool() for enterprise tools
@@ -60,7 +60,7 @@ Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 * Threat: cost of wrong lynch (1 if village majority, else 0.5).
 * LLM-gate (MVP): If max_revised_confidence < TAU (default 0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
 * Trust score = revised_confidence calibrated via Platt (fit later).
-* Jev-gate (System-One, live): same state sent to Jev `jev-1.13-free` via BeatAI SystemOne in one round trip — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > 0.6` -> DELAY. Free tier ~1 success/min (61s process guard, stub fallback logged). Hybrid = muse-spark (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
+* Jev-gate (System-One, live): same state sent to Jev `jev-1.13-free` in one round trip — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > JEV_THRESHOLD (0.6)` -> DELAY. Key precedence `OpenRouterJevAPIKey > JEV_API_KEY`; the unlimited key disables the old 61s guard (stub fallback still logged per call). Hybrid = LLM (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
 
 ### 5. Logging schema (parquet, data-engineer friendly)
 `games(game_id, seed, focal, gate, winner[village|mafia|draw], days, focal_role, majority_correct, trust_json, trace_json, prompt_tokens, completion_tokens, est_cost_inr, jev_stub)`  
@@ -93,7 +93,7 @@ Run 10 seeds x 4 agents to show backbone-agnostic gain. No prompt change. `--foc
 * LLM cost blow-up -> measured Rs.2.7/game (2026-10-14); 200-game MVP ≈ Rs.550. Cap history window / rounds before scaling if needed.
 * Reasoning-model empty content -> `LLM_MAX_TOKENS=1500` minimum; `chat_text()` is None-safe with retry.
 * All-delay draws -> vote prompt delays only without a standout suspect; timeout games recorded as `"draw"`, kept visible in summaries.
-* Jev rate limit (1 success/min free) -> 61s guard + auditable stub; top up BeatAI for dense `--gate jev` runs.
+* Jev rate limit (legacy BeatAI free tier) -> guard off when `OpenRouterJevAPIKey` is set (`JEV_MIN_INTERVAL_S` override); every stub still logged with reason.
 * JSON breakage -> `chat_json()` with repair + fallback to no-lynch (safe default = DELAY). Jev-gate avoids this (typed by construction).
 * Non-reproducibility -> seeds + raw logs.
 * Jev hosted dependency (not open-source, text-only) -> keep LLM-gate MVP first; Jev as optional ablation with separate logs.
