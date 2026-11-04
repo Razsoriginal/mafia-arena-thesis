@@ -21,8 +21,12 @@ class DmnTpnAgent(BaseAgent):
 
     def reason(self, role, history, facts, alive, prev_majority=None, alive_roles=None):
         self._alive = list(alive)
-        dmn = llm.chat_json(P.DMN_SYSTEM, P.dmn_user(self.pid, role, history, alive))
-        tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts))
+        dmn_meta, tpn_meta = {}, {}
+        dmn = llm.chat_json(P.DMN_SYSTEM, P.dmn_user(self.pid, role, history, alive),
+                            meta=dmn_meta)
+        tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts),
+                            meta=tpn_meta)
+        parse_fail = bool(dmn_meta.get("parse_fail") or tpn_meta.get("parse_fail"))
         verified = tpn.get("verified", [])
         conf_by_suspect = {}
         for v in verified:
@@ -45,7 +49,15 @@ class DmnTpnAgent(BaseAgent):
         else:
             threat = 0.8  # legacy fallback when role counts unavailable
         evt = violation * threat
-        delay = (max_conf < settings.tau_delay) or (evt > settings.evt_threshold)
+        if parse_fail:
+            delay_cause = "json_failure"
+        elif max_conf < settings.tau_delay:
+            delay_cause = "low_confidence"
+        elif evt > settings.evt_threshold:
+            delay_cause = "evt_threshold"
+        else:
+            delay_cause = None
+        delay = delay_cause is not None
         # Trust for EVERY alive player (1 = innocent), default 0.5 unverified.
         trust = {}
         for pid in alive:
@@ -58,7 +70,10 @@ class DmnTpnAgent(BaseAgent):
         trace = {"dmn": dmn, "tpn": tpn, "max_conf": max_conf,
                  "top_suspect": top_suspect, "prev_majority": prev_majority,
                  "violation": violation, "threat": threat, "evt": evt,
-                 "delay": delay, "commitment": COMMITMENT,
+                 "delay": delay, "delay_cause": delay_cause,
+                 "parse_fail": parse_fail,
+                 "dmn_meta": dmn_meta, "tpn_meta": tpn_meta,
+                 "commitment": COMMITMENT,
                  "reason_cached_before_discussion": True}
         return trust, trace, delay
 
@@ -77,11 +92,18 @@ class DmnTpnAgent(BaseAgent):
             if should_delay(jev_out, settings.jev_threshold):
                 return "no-lynch", {"reason": f"Jev DELAY: noul {jev_out['should_delay_noul']:.2f}",
                                     "trace": trace, "jev": jev_out,
-                                    "commitment": trace.get("commitment", COMMITMENT)}
+                                    "commitment": trace.get("commitment", COMMITMENT),
+                                    "parse_fail": False, "delay_cause": "jev"}
         elif trace.get("delay"):
             return "no-lynch", {"reason": "EVT delay: insufficient calibrated evidence",
-                                "trace": trace, "commitment": trace.get("commitment", COMMITMENT)}
-        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust))
-        return str(d.get("vote", "no-lynch")), {"reason": d.get("reason", ""), "trace": trace,
-                                                "jev": jev_out,
-                                                "commitment": trace.get("commitment", COMMITMENT)}
+                                "trace": trace, "commitment": trace.get("commitment", COMMITMENT),
+                                "parse_fail": bool(trace.get("parse_fail")),
+                                "delay_cause": trace.get("delay_cause")}
+        meta = {}
+        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta)
+        return str(d.get("vote", "no-lynch")), {
+            "reason": d.get("reason", ""), "trace": trace, "jev": jev_out,
+            "commitment": trace.get("commitment", COMMITMENT),
+            "parse_fail": bool(meta.get("parse_fail")),
+            "delay_cause": "json_failure" if meta.get("parse_fail") else None,
+        }

@@ -2,68 +2,66 @@ import os
 from dataclasses import dataclass, field
 from dotenv import load_dotenv
 
-load_dotenv()
+# .env is the project's source of truth; a stale shell export must not win.
+load_dotenv(override=True)
+
+AICREDITS_DEFAULT_BASE_URL = "https://aicredits.in/v1"
+OPENROUTER_DEFAULT_BASE_URL = "https://openrouter.ai/api/v1"
+
 
 def _llm_config() -> tuple[str, str, str, str]:
-    """(provider, base_url, api_key, model). OpenRouter wins when set.
+    """(provider, base_url, api_key, model) for the main LLM backbone.
 
-    Current primary (2026-10-22): OpenRouter via .env OpenRouterAPIKey /
-    OpenRouterModel (e.g. minimax/minimax-m3.1-flash:free). Falls back to
-    the previous AiCredits LLM_* vars so old runs stay reproducible.
+    AiCredits is the only backbone. Reads AiCredits_Base_Url /
+    Aicredits_API_Key / AiCredits_Model (the casing used in .env), falling
+    back to the older LLM_* names so existing setups keep working.
     """
-    or_key = os.getenv("OpenRouterAPIKey", "").strip()
-    or_model = os.getenv("OpenRouterModel", "").strip()
-    if or_key and or_model:
-        return (
-            "openrouter",
-            os.getenv("OpenRouterBaseUrl", "https://openrouter.ai/api/v1"),
-            or_key,
-            or_model,
-        )
-    return (
-        "aicredits",
-        os.getenv("LLM_BASE_URL", "https://api.aicredits.in/v1"),
-        os.getenv("LLM_API_KEY", ""),
-        os.getenv("LLM_MODEL", "meta/muse-spark-1.3-contributor"),
+    base_url = (
+        os.getenv("AiCredits_Base_Url", "").strip()
+        or os.getenv("AICREDITS_BASE_URL", "").strip()
+        or AICREDITS_DEFAULT_BASE_URL
     )
+    api_key = (
+        os.getenv("Aicredits_API_Key", "").strip()
+        or os.getenv("AiCredits_API_Key", "").strip()
+        or os.getenv("LLM_API_KEY", "").strip()
+    )
+    model = (
+        os.getenv("AiCredits_Model", "").strip()
+        or os.getenv("LLM_MODEL", "").strip()
+        or "meta/muse-spark-1.3-contributor"
+    )
+    return "aicredits", base_url, api_key, model
 
 
 _PROVIDER, _BASE_URL, _API_KEY, _MODEL = _llm_config()
 
 def _jev_config() -> tuple[str, str, str, float, float]:
-    """(base_url, api_key, model, min_interval_s, threshold).
+    """(base_url, api_key, model, min_interval_s, threshold) for the Jev gate.
 
-    Key precedence: OpenRouterJevAPIKey > JEV_API_KEY > LLM_API_KEY.
-    Endpoint default stays BeatAI SystemOne (probe Step 0 decides); set
-    OpenRouterJevBaseUrl=https://openrouter.ai/api/v1 if the new key only
-    works via OpenRouter (the existing chat fallback then handles it).
-    The old 61s BeatAI free-tier guard is off when the new key is present;
-    JEV_MIN_INTERVAL_S overrides either way.
+    Jev is called through OpenRouter only: OpenRouterJevAPIKey +
+    OpenRouterJevModel on an OpenAI-compatible endpoint. No BeatAI/systemone
+    fallback and no key borrowing. Without OpenRouterJevAPIKey the gate
+    returns a logged stub (no delay) instead of silently using another key.
     """
-    key = (
-        os.getenv("OpenRouterJevAPIKey", "").strip()
-        or os.getenv("JEV_API_KEY", "")
-        or os.getenv("LLM_API_KEY", "")
-    )
     base_url = (
         os.getenv("OpenRouterJevBaseUrl", "").strip()
-        or os.getenv("JEV_BASE_URL", "https://api.beatapi.io/v1/systemone")
+        or OPENROUTER_DEFAULT_BASE_URL
     )
+    api_key = os.getenv("OpenRouterJevAPIKey", "").strip()
     model = (
         os.getenv("OpenRouterJevModel", "").strip()
-        or os.getenv("JEV_MODEL", "jev-1.13-free")
+        or "typesafe/jev-1.14"
     )
-    has_new_key = bool(os.getenv("OpenRouterJevAPIKey", "").strip())
     try:
-        min_interval = float(os.getenv(
-            "JEV_MIN_INTERVAL_S", "0.0" if has_new_key else "61.0"))
+        min_interval = float(os.getenv("JEV_MIN_INTERVAL_S", "0"))
     except ValueError:
-        min_interval = 0.0 if has_new_key else 61.0
+        min_interval = 0.0
     try:
         threshold = float(os.getenv("JEV_THRESHOLD", "0.6"))
     except ValueError:
         threshold = 0.6
-    return base_url, key, model, min_interval, threshold
+    return base_url, api_key, model, min_interval, threshold
 
 
 _JEV_BASE_URL, _JEV_API_KEY, _JEV_MODEL, _JEV_MIN_INTERVAL, _JEV_THRESHOLD = _jev_config()

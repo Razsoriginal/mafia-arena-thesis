@@ -1,0 +1,35 @@
+{
+  "run_tag": "smoke-preflight",
+  "started_at": "2026-11-03T23:33:09.609181+00:00",
+  "git_sha": "532da7e",
+  "args": {
+    "games": 1,
+    "agents": "dmn_tpn,cot",
+    "seed": 0,
+    "gate": "llm",
+    "night": "llm",
+    "focal_role": "random",
+    "run_tag": "smoke-preflight",
+    "max_days": 1,
+    "out": "logs/games.parquet"
+  },
+  "llm": {
+    "provider": "aicredits",
+    "base_url": "https://aicredits.in/v1",
+    "model": "meta/muse-spark-1.3-contributor",
+    "max_tokens": 1500,
+    "temperature_dialogue": 0.3,
+    "temperature_json": 0.0
+  },
+  "jev": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "typesafe/jev-1.14",
+    "key_present": true,
+    "min_interval_s": 0.0,
+    "threshold": 0.6
+  },
+  "thresholds": {
+    "tau_delay": 0.65,
+    "evt_threshold": 0.6
+  }
+}

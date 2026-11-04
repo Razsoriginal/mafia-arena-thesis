@@ -14,7 +14,7 @@ import pandas as pd
 import streamlit as st
 from dotenv import load_dotenv
 
-load_dotenv()
+load_dotenv(override=True)
 ROOT = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 
@@ -42,9 +42,17 @@ def load_progress() -> pd.DataFrame:
     return pd.DataFrame(rows)
 
 
+def _games_files():
+    return sorted(set(
+        glob.glob(os.path.join(ROOT, "logs", "games*.parquet"))
+        + glob.glob(os.path.join(ROOT, "logs", "runs", "*", "games.parquet"))
+    ))
+
+
 def list_outputs():
     files = []
-    for pat in ("logs/*.parquet", "logs/raw/*.parquet"):
+    for pat in ("logs/*.parquet", "logs/raw/*.parquet",
+                "logs/runs/*/*.parquet", "logs/runs/*/raw/*.parquet"):
         for fp in glob.glob(os.path.join(ROOT, pat)):
             stt = os.stat(fp)
             files.append({"file": os.path.relpath(fp, ROOT),
@@ -69,14 +77,21 @@ def load_games(name: str):
     return pd.read_parquet(fp)
 
 
+def _aicredits_config():
+    key = (os.getenv("Aicredits_API_Key") or os.getenv("AiCredits_API_Key")
+           or os.getenv("LLM_API_KEY") or "")
+    model = os.getenv("AiCredits_Model") or os.getenv("LLM_MODEL") or "meta/muse-spark-1.3-contributor"
+    base = (os.getenv("AiCredits_Base_Url") or "https://aicredits.in/v1").rstrip("/")
+    return key, model, base
+
+
 @st.cache_data(ttl=3600)
 def aicredits_rates():
-    key = os.getenv("LLM_API_KEY") or ""
-    model = os.getenv("LLM_MODEL") or "meta/muse-spark-1.3-contributor"
+    key, model, base = _aicredits_config()
     if not key:
-        return {"error": "LLM_API_KEY unset"}
+        return {"error": "Aicredits_API_Key unset"}
     try:
-        req = urllib.request.Request("https://api.aicredits.in/v1/models",
+        req = urllib.request.Request(base + "/models",
                                      headers={"Authorization": "Bearer " + key})
         with urllib.request.urlopen(req, timeout=20) as r:
             items = json.loads(r.read().decode()).get("data", [])
@@ -89,11 +104,11 @@ def aicredits_rates():
 
 
 def aicredits_wallet():
-    key = os.getenv("LLM_API_KEY") or ""
+    key, _, base = _aicredits_config()
     if not key:
-        return {"error": "LLM_API_KEY unset"}
+        return {"error": "Aicredits_API_Key unset"}
     try:
-        req = urllib.request.Request("https://api.aicredits.in/v1/credits",
+        req = urllib.request.Request(base + "/credits",
                                      headers={"Authorization": "Bearer " + key})
         with urllib.request.urlopen(req, timeout=20) as r:
             return json.loads(r.read().decode())
@@ -129,11 +144,10 @@ with tabs[0]:
     st.dataframe(list_outputs(), width="stretch")
 
 with tabs[1]:
-    st.subheader("Spend — LLM via OpenRouter/AiCredits, Jev gate")
-    st.caption("LLM cost: AiCredits wallet (read-only) + manual calculation below "
-               "(OpenRouter :free models cost 0). "
-               "Jev uses OpenRouterJevAPIKey when set (no 1 req/min guard); "
-               "otherwise the legacy BeatAI free-tier guard applies.")
+    st.subheader("Spend — LLM via AiCredits, Jev gate via OpenRouter")
+    st.caption("LLM cost: AiCredits wallet (read-only) + token estimate from the run bundle. "
+               "Jev uses OpenRouterJevAPIKey + OpenRouterJevModel only; "
+               "without the key the gate logs a stub and does not delay.")
     if st.button("Check AiCredits wallet now"):
         w = aicredits_wallet()
         st.json(w)
@@ -146,7 +160,7 @@ with tabs[1]:
                  f"input {rates.get('input_cost_per_token_inr', 0)*1e6:.2f}, "
                  f"output {rates.get('output_cost_per_token_inr', 0)*1e6:.2f} "
                  f"(context {rates.get('context_length', '?')})")
-    gfiles = sorted(glob.glob(os.path.join(ROOT, "logs", "games*.parquet")))
+    gfiles = _games_files()
     if gfiles:
         name = os.path.relpath(st.selectbox("Games file", gfiles), ROOT)
         df = load_games(name)
@@ -176,7 +190,7 @@ with tabs[1]:
 
 with tabs[2]:
     st.subheader("Results")
-    gfiles = sorted(glob.glob(os.path.join(ROOT, "logs", "games*.parquet")))
+    gfiles = _games_files()
     if not gfiles:
         st.info("No games files yet — run: python -m src.eval.run_arena --games 2")
     else:
@@ -190,9 +204,12 @@ with tabs[2]:
 
 with tabs[3]:
     st.subheader("Per-game histories")
-    hfiles = sorted(glob.glob(os.path.join(ROOT, "logs", "raw", "history_*.parquet")))
+    hfiles = sorted(set(
+        glob.glob(os.path.join(ROOT, "logs", "raw", "history_*.parquet"))
+        + glob.glob(os.path.join(ROOT, "logs", "runs", "*", "raw", "history_*.parquet"))
+    ))
     if not hfiles:
-        st.info("No logs/raw/history_*.parquet yet.")
+        st.info("No history_*.parquet yet.")
     else:
         fp = st.selectbox("History file", hfiles)
         try:
@@ -213,17 +230,17 @@ with tabs[4]:
 with tabs[5]:
     st.subheader("Active configuration (secrets masked)")
     st.json({
-        "LLM": {"base_url": os.getenv("LLM_BASE_URL"), "model": os.getenv("LLM_MODEL"),
-                "api_key": _masked("LLM_API_KEY"), "max_tokens": os.getenv("LLM_MAX_TOKENS")},
-        "OpenRouter": {"model": os.getenv("OpenRouterModel"),
-                       "api_key": _masked("OpenRouterAPIKey")},
-        "JEV": {"base_url": os.getenv("OpenRouterJevBaseUrl") or os.getenv("JEV_BASE_URL"),
-                "model": os.getenv("OpenRouterJevModel") or os.getenv("JEV_MODEL"),
-                "api_key": (_masked("OpenRouterJevAPIKey") if os.getenv("OpenRouterJevAPIKey") else _masked("JEV_API_KEY")),
-                "min_interval": os.getenv("JEV_MIN_INTERVAL_S", "0 with new key, else 61"),
-                "jev_threshold": os.getenv("JEV_THRESHOLD", "0.6")},
+        "AiCredits": {"base_url": os.getenv("AiCredits_Base_Url") or "https://aicredits.in/v1",
+                      "model": os.getenv("AiCredits_Model") or os.getenv("LLM_MODEL"),
+                      "api_key": (_masked("Aicredits_API_Key") if os.getenv("Aicredits_API_Key")
+                                  else _masked("LLM_API_KEY")),
+                      "max_tokens": os.getenv("LLM_MAX_TOKENS")},
+        "Jev (OpenRouter)": {"base_url": os.getenv("OpenRouterJevBaseUrl") or "https://openrouter.ai/api/v1",
+                             "model": os.getenv("OpenRouterJevModel") or "typesafe/jev-1.14",
+                             "api_key": _masked("OpenRouterJevAPIKey"),
+                             "min_interval": os.getenv("JEV_MIN_INTERVAL_S", "0"),
+                             "jev_threshold": os.getenv("JEV_THRESHOLD", "0.6")},
         "thresholds": {"TAU_DELAY": os.getenv("TAU_DELAY"), "EVT_THRESHOLD": os.getenv("EVT_THRESHOLD"),
                        "temps": [os.getenv("LLM_TEMPERATURE_DIALOGUE"), os.getenv("LLM_TEMPERATURE_JSON")]},
     })
-    st.caption("Last live-verified 2026-10-14: AiCredits chat_text/chat_json OK; "
-               "BeatAI systemone noul/choice/score OK. Re-verify after the OpenRouter switch.")
+    st.caption("Run python -m src.eval.probe to re-verify both providers before a long run.")

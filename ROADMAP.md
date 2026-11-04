@@ -1,13 +1,14 @@
 # Roadmap — Mafia Arena Thesis (MSc AI Part-2)
 
-Backbone: `meta/muse-spark-1.3-contributor` via AiCredits (System-2 DMN/TPN). Jev `jev-1.13-free` via BeatAI SystemOne (System-1 gate, live — `--gate llm|jev`).
+Backbone: `AiCredits_Model` (default `meta/muse-spark-1.3-contributor`) via AiCredits `https://aicredits.in/v1` (System-2 DMN/TPN). Jev gate: OpenRouter only — `OpenRouterJevAPIKey` + `OpenRouterJevModel` (`typesafe/jev-1.14`) — `--gate llm|jev`. Night actions: `--night llm|scripted` (default llm).
 Rule: one variable per iteration. Every claim needs `logs/*.parquet` evidence.
 
 ## Phase 0 — Start (Week 1)
 1. `pip install -r requirements.txt`
-2. `Copy-Item .env.example .env` → set `LLM_API_KEY` (AiCredits) + `JEV_API_KEY` (BeatAI).
-3. `python -m src.eval.run_arena --games 2 --focal-role villager` → must produce `logs/games.parquet` + `logs/raw/` + `logs/progress.jsonl`.
-4. Read 2 failures in `logs/raw/`. Tune one line in `src/mafia/prompts.py` only (done 2026-10-14: vote delays only without standout suspect).
+2. `Copy-Item .env.example .env` → set `Aicredits_API_Key` (AiCredits) + `OpenRouterJevAPIKey` (OpenRouter).
+3. `python -m src.eval.probe` → both providers must return content/typed output.
+4. `python -m src.eval.run_arena --games 2 --focal-role villager` → must produce `logs/games.parquet`, `logs/votes.parquet`, `logs/trust.parquet`, `logs/runs/<run_tag>/`, `logs/progress.jsonl`.
+5. Read 2 failures in `logs/raw/`. Tune one line in `src/mafia/prompts.py` only (done 2026-10-14: vote delays only without standout suspect).
 Exit: 5 clean games, JSON failures fall back to `no-lynch`, timeouts recorded as `"draw"`, no crashes.
 
 ## Phase 1 — MVP (Weeks 2-6)
@@ -25,7 +26,7 @@ Exit: Thesis Ch.4-5 table — win-rate, ECE, cascade-resistance, delay-quality, 
 
 ## Phase 3 — Jev Brake (Weeks 11-13, 10 games)
 - Keep DMN/TPN on muse-spark. Gate via `src/agents/jev_gate.py` + `src/safety/gate.py` (`--gate jev`).
-- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>JEV_THRESHOLD (0.6)` → DELAY. Unlimited `OpenRouterJevAPIKey` disables the old ~1 req/min guard; every stub still logged per call (`jev_stub`).
+- Jev `choice`=vote, `score`=threat 1-5, `noul`=should-delay. Threshold `noul>JEV_THRESHOLD (0.6)` → DELAY. OpenRouter-only: `OpenRouterJevAPIKey` + `OpenRouterJevModel`; every stub/error logged per call (`jev_stub`).
 - Compare LLM-gate vs Jev-gate: calibration delta, latency, cost, JSON error rate.
 Exit: Hybrid System-2+1 result. Thesis Ch.6. See `docs/enterprise_integration.md`.
 

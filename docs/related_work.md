@@ -43,7 +43,7 @@ SBSC (ICLR25, +10.7% AMC/+8% AIME) — multi-turn code; No Stress No Gain (Verif
 ## E. Our gaps (almost empty — novelty)
 
 1. **Exformation:** 1 paper only — Lissack & Meagher Oct 2025 SSRN (philosophy, no implementation) + Nørretranders origin. Zero agent operationalizations. We implement as JSON field + ablate.
-2. **Jev System-One gate:** TypeSafe AI Sep 2026 model family; `jev-1.13-free` served on BeatAI SystemOne API (choice/score/noul, free tier ~1 req/min). Zero papers. We compare LLM-gate vs Jev-gate on ECE/latency/cost.
+2. **Jev System-One gate:** TypeSafe AI Sep 2026 model family; `typesafe/jev-1.14` served through OpenRouter (`OpenRouterJevAPIKey` + `OpenRouterJevModel`) with choice/score/noul. Zero papers. We compare LLM-gate vs Jev-gate on ECE/latency/cost.
 3. **Say-do-gap + EVT delay + `src/safety/` audit:** no benchmark combines calibration + cascade-resistance + delay-quality + transfer to enterprise tool with parquet audit.
 
 ## F. Methods / theory to cite

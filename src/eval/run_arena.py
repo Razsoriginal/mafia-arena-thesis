@@ -1,36 +1,108 @@
 """Arena runner: python -m src.eval.run_arena --games 5 --agents dmn_tpn,cot --seed 0
-All roles use the backbone from src/config.py (OpenRouter when configured,
-else AiCredits). EVT DELAY source: --gate llm (tau/evt heuristics) | jev.
-Per-day metric tables: logs/votes.parquet + logs/trust.parquet (+ game rows
-in --out, default logs/games.parquet). Per-day traces: logs/raw/trace_*.json.
+
+Backbone is AiCredits (src/config.py). EVT DELAY source: --gate llm | jev.
+Night phase: --night llm (default, LLM choice with scripted fallback) or
+scripted (legacy deterministic heuristics).
+
+Every invocation writes its own audit bundle:
+  logs/runs/<run_tag>/manifest.json   config + git sha + thresholds
+  logs/runs/<run_tag>/games.parquet
+  logs/runs/<run_tag>/votes.parquet
+  logs/runs/<run_tag>/trust.parquet
+  logs/runs/<run_tag>/raw/trace_*.json + history_*.parquet
+Canonical logs/games.parquet, logs/votes.parquet and logs/trust.parquet are
+upserted (never overwritten) so partial runs stay usable.
 """
-import argparse, os, json, random, time, pandas as pd
-from src.mafia.engine import Game
+import argparse
+import json
+import os
+import random
+import subprocess
+import time
+from datetime import datetime, timezone
+
+import pandas as pd
+
 from src.agents.baselines import CotAgent, ReactAgent, ConstitutionAgent
 from src.agents.dmn_tpn_agent import DmnTpnAgent
-from src.llm_client import COST_LOG
 from src.config import settings
+from src.llm_client import COST_LOG
+from src.mafia.engine import Game
 
 AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent, "dmn_tpn": DmnTpnAgent}
 
-# AiCredits catalog rates 2026-10-14 for meta/muse-spark-1.3-contributor (USD/token) + INR/USD.
-# OpenRouter :free models cost 0; other OpenRouter models: token counts are
-# logged, set a rate here before quoting cost for a paid model.
+# AiCredits catalog rates (USD/token) + INR/USD for meta/muse-spark-1.3-contributor.
 _MUSE_IN, _MUSE_OUT, _INR_PER_USD = 1e-07, 2e-07, 95.319179
 
 
 def _est_cost_inr(prompt_tokens: int, completion_tokens: int) -> float:
-    if settings.provider == "openrouter":
-        return 0.0  # :free = 0; paid OpenRouter rate not configured yet
     return round((prompt_tokens * _MUSE_IN + completion_tokens * _MUSE_OUT) * _INR_PER_USD, 4)
 
 
-def _log_progress(run_id, seed, focal, gate, day, alive, winner):
+def _git_sha() -> str:
+    try:
+        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True).strip()
+    except Exception:
+        return "unknown"
+
+
+def _upsert(path: str, new_df: pd.DataFrame, keys: list):
+    """Append rows to a parquet table, replacing duplicates on `keys`."""
+    if new_df is None or new_df.empty:
+        return
+    os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
+    if os.path.exists(path):
+        try:
+            old = pd.read_parquet(path)
+            df = pd.concat([old, new_df], ignore_index=True)
+            present = [k for k in keys if k in df.columns]
+            if present:
+                df = df.drop_duplicates(subset=present, keep="last")
+        except Exception:
+            df = new_df
+    else:
+        df = new_df
+    df.to_parquet(path, index=False)
+
+
+def _write_manifest(path: str, args, run_tag: str, git_sha: str):
+    manifest = {
+        "run_tag": run_tag,
+        "started_at": datetime.now(timezone.utc).isoformat(),
+        "git_sha": git_sha,
+        "args": vars(args),
+        "llm": {
+            "provider": settings.provider,
+            "base_url": settings.base_url,
+            "model": settings.model,
+            "max_tokens": settings.max_tokens,
+            "temperature_dialogue": settings.temp_dialogue,
+            "temperature_json": settings.temp_json,
+        },
+        "jev": {
+            "base_url": settings.jev_base_url,
+            "model": settings.jev_model,
+            "key_present": bool(settings.jev_api_key),
+            "min_interval_s": settings.jev_min_interval,
+            "threshold": settings.jev_threshold,
+        },
+        "thresholds": {"tau_delay": settings.tau_delay, "evt_threshold": settings.evt_threshold},
+    }
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(manifest, f, indent=2)
+
+
+def _log_progress(run_tag, run_id, seed, requested_seed, focal, gate, night_mode, day, alive, winner):
     os.makedirs("logs", exist_ok=True)
     with open("logs/progress.jsonl", "a") as f:
-        f.write(json.dumps({"ts": time.time(), "run_id": run_id, "seed": seed,
-                            "focal": focal, "gate": gate, "day": day,
-                            "alive": alive, "winner": winner}) + "\n")
+        f.write(json.dumps({
+            "ts": time.time(), "run_tag": run_tag, "run_id": run_id,
+            "seed": seed, "requested_seed": requested_seed,
+            "focal": focal, "gate": gate, "night_mode": night_mode,
+            "provider": settings.provider, "model": settings.model,
+            "day": day, "alive": alive, "winner": winner,
+        }) + "\n")
+
 
 def _make_game(seed, focal_role="random"):
     """Role-balanced game: re-seed (bounded) until pid 0 has focal_role. Engine untouched."""
@@ -60,9 +132,58 @@ def _private_note(game, pid, det_info):
     return "\n[private: only you see this]\n" + "\n".join(notes)
 
 
-def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"):
-    run_id = run_id or f"{seed}-{focal}"
-    game, seed = _make_game(seed, focal_role)
+def _night_actions(game, agents, seed, day, night_mode, det_info):
+    """Return (kill, save, check). LLM choices fall back to scripted heuristics."""
+    alive = game.alive_ids()
+    mafia_pids = [p.pid for p in game.alive() if p.role == "mafia"]
+    kill = save = check = None
+    if not mafia_pids or len(alive) <= 2:
+        return None, None, None
+
+    candidates = [a for a in alive if game.players[a].role != "mafia"]
+    if night_mode == "llm" and candidates:
+        killer = min(mafia_pids)
+        ctx = game.history_text(limit=40) + _private_note(game, killer, det_info)
+        pick = agents[killer].night_action("mafia", ctx, alive, candidates, "kill")
+        if pick is not None:
+            kill = int(pick)
+    if kill is None and candidates:
+        kill = random.Random(seed * 1000 + day).choice(candidates)
+
+    doctors = [p.pid for p in game.alive() if p.role == "doctor"]
+    if doctors:
+        if night_mode == "llm":
+            doc = doctors[0]
+            ctx = game.history_text(limit=40) + _private_note(game, doc, det_info)
+            pick = agents[doc].night_action("doctor", ctx, alive, alive, "save")
+            if pick is not None:
+                save = int(pick)
+        if save is None:
+            save = doctors[0]
+
+    detectives = [p.pid for p in game.alive() if p.role == "detective"]
+    if detectives:
+        det = detectives[0]
+        options = [a for a in alive if a != det]
+        if night_mode == "llm" and options:
+            ctx = game.history_text(limit=40) + _private_note(game, det, det_info)
+            pick = agents[det].night_action("detective", ctx, alive, options, "check")
+            if pick is not None:
+                check = int(pick)
+        if check is None and options:
+            check = min(options)
+    return kill, save, check
+
+
+def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random",
+             night_mode="llm", run_tag="", run_dir="logs/runs/tmp", requested_seed=None,
+             max_days=5):
+    game, _ = _make_game(seed, focal_role)
+    run_id = run_id or f"{game.seed}-{focal}"
+    requested_seed = seed if requested_seed is None else requested_seed
+    game._run_id = run_id
+    raw_dir = os.path.join(run_dir, "raw")
+    os.makedirs(raw_dir, exist_ok=True)
     # assign: focal agent class controls pid 0, baselines elsewhere
     agents = {}
     for p in game.players:
@@ -75,26 +196,15 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
     det_info = {}  # detective pid -> (checked_pid, role): private, never shared
     prev_majority = None
     vote_rows, trust_rows = [], []
-    max_days = 5
     for day in range(max_days):
         if game.check_over():
             break
         game.day = day
-        # night (simple heuristics: seeded-random kill, doctor self-save, detective checks lowest alive non-self)
-        alive = game.alive_ids()
-        mafia_pids = [p.pid for p in game.alive() if p.role == "mafia"]
-        if mafia_pids and len(alive) > 2:
-            rr = random.Random(seed * 1000 + day)
-            candidates = [a for a in alive if game.players[a].role != "mafia"]
-            kill = rr.choice(candidates) if candidates else None
-            save = None
-            doc = [p.pid for p in game.alive() if p.role == "doctor"]
-            if doc:
-                save = doc[0]  # self-save MVP
+        kill, save, check = _night_actions(game, agents, game.seed, day, night_mode, det_info)
+        if kill is not None:
+            res = game.night(kill, save, check)
             det = [p.pid for p in game.alive() if p.role == "detective"]
-            chk = min([a for a in alive if a not in det]) if det else None
-            res = game.night(kill, save, chk)
-            if det and chk is not None:
+            if det and check is not None:
                 det_info[det[0]] = res["detective_info"]
             if res["killed"] is not None:
                 game.add("engine", f"Night: Player {res['killed']} was killed.", f"night-{day}")
@@ -141,7 +251,6 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         from collections import Counter
         c = Counter([v for v in votes.values() if v != "no-lynch"])
         maj = c.most_common(1)[0][0] if c else "no-lynch"
-        # majority correct? true mafia?
         maj_correct = True
         if maj != "no-lynch":
             try:
@@ -159,32 +268,37 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             info = infos.get(voter, {})
             jev = info.get("jev") if isinstance(info, dict) else None
             vote_rows.append({
-                "game_id": run_id, "day": day, "voter": voter, "vote": str(v),
-                "majority_vote": str(maj), "majority_correct": bool(maj_correct),
-                "is_focal": voter == 0,
+                "run_tag": run_tag, "game_id": run_id, "day": day, "voter": voter,
+                "vote": str(v), "majority_vote": str(maj),
+                "majority_correct": bool(maj_correct), "is_focal": voter == 0,
                 "vote_reason": str(info.get("reason", ""))[:500],
                 "commitment": str(info.get("commitment", "")),
+                "parse_fail": bool(info.get("parse_fail")),
+                "delay_cause": info.get("delay_cause"),
                 "jev_stub": (jev.get("stub") if isinstance(jev, dict) else None),
+                "provider": settings.provider, "model": settings.model,
+                "night_mode": night_mode,
             })
         for target, tval in (trust_all.get(0, {}) or {}).items():
             try:
                 is_mafia = game.players[int(target)].role == "mafia"
-                trust_rows.append({"game_id": run_id, "day": day, "agent": 0,
-                                  "target": str(target), "trust": float(tval),
-                                  "target_is_mafia": bool(is_mafia)})
+                trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                                   "agent": 0, "target": str(target),
+                                   "trust": float(tval), "target_is_mafia": bool(is_mafia),
+                                   "provider": settings.provider, "model": settings.model})
             except Exception:
                 continue
         # full per-day trace for audit
         try:
-            os.makedirs("logs/raw", exist_ok=True)
-            with open(f"logs/raw/trace_{run_id}-day{day}.json", "w", encoding="utf-8") as f:
-                json.dump({"trust": trust_all.get(0, {}), "trace": traces.get(0, {})}, f, default=str)
+            with open(os.path.join(raw_dir, f"trace_{run_id}-day{day}.json"), "w", encoding="utf-8") as f:
+                json.dump({"run_tag": run_tag, "run_id": run_id, "model": settings.model,
+                           "trust": trust_all.get(0, {}), "trace": traces.get(0, {})}, f, default=str)
         except Exception:
             pass
-        # last-day summary (games.parquet, dashboard-compatible)
         game._last_votes = {"votes": votes, "majority": str(maj), "majority_correct": maj_correct,
                             "trust": trust_all.get(0, {}), "trace": traces.get(0, {})}
-        _log_progress(run_id, seed, focal, gate, day, len(game.alive_ids()), game.winner)
+        _log_progress(run_tag, run_id, game.seed, requested_seed, focal, gate,
+                      night_mode, day, len(game.alive_ids()), game.winner)
         prev_majority = str(maj)
     game.check_over()
     if game.winner is None:
@@ -193,60 +307,106 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
     game._trust_rows = trust_rows
     return game
 
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=5)
     ap.add_argument("--agents", type=str, default="dmn_tpn,cot")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--gate", type=str, default="llm", choices=["llm", "jev"])
+    ap.add_argument("--night", type=str, default="llm", choices=["llm", "scripted"])
     ap.add_argument("--focal-role", type=str, default="random",
                     choices=["random", "villager", "mafia", "doctor", "detective"])
+    ap.add_argument("--run-tag", type=str, default=None)
+    ap.add_argument("--max-days", type=int, default=5,
+                    help="day cap (lower only for pipeline smoke tests)")
+    ap.add_argument("--no-canonical", action="store_true",
+                    help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
     args = ap.parse_args()
-    focals = args.agents.split(",")
-    rows, all_votes, all_trust = [], [], []
+
+    run_tag = args.run_tag or time.strftime("%Y%m%d-%H%M%S")
+    os.environ["MAFIA_RUN_TAG"] = run_tag
+    run_dir = os.path.join("logs", "runs", run_tag)
+    os.makedirs(os.path.join(run_dir, "raw"), exist_ok=True)
+    os.environ["MAFIA_RAW_DIR"] = os.path.join(run_dir, "raw")
+    git_sha = _git_sha()
+    _write_manifest(os.path.join(run_dir, "manifest.json"), args, run_tag, git_sha)
+
+    focals = [f.strip() for f in args.agents.split(",") if f.strip()]
+    rows = []
     for i in range(args.games):
         for focal in focals:
-            focal = focal.strip()
-            run_id = f"{args.seed+i}-{focal}"
             mark = dict(COST_LOG)
-            g = play_one(seed=args.seed + i * 100, focal=focal, gate=args.gate,
-                         run_id=run_id, focal_role=args.focal_role)
-            all_votes.extend(getattr(g, "_vote_rows", []))
-            all_trust.extend(getattr(g, "_trust_rows", []))
+            requested_seed = args.seed + i * 100
+            g = play_one(seed=requested_seed, focal=focal, gate=args.gate,
+                         focal_role=args.focal_role, night_mode=args.night,
+                         run_tag=run_tag, run_dir=run_dir,
+                         requested_seed=requested_seed, max_days=args.max_days)
+            run_id = g._run_id
             dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
             dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
+            dj = COST_LOG["json_failures"] - mark["json_failures"]
             lv = getattr(g, "_last_votes", {})
             fl = getattr(g, "_focal_last", {}) or {}
             trace = fl.get("trace", {}) if isinstance(fl, dict) else {}
             jev_info = trace.get("jev") if isinstance(trace, dict) else None
-            rows.append({
-                "game_id": run_id, "seed": args.seed + i, "focal": focal,
-                "gate": args.gate, "tau": settings.tau_delay,
+            row = {
+                "run_tag": run_tag, "game_id": run_id,
+                "seed": g.seed, "requested_seed": requested_seed,
+                "focal": focal, "gate": args.gate, "night_mode": args.night,
+                "provider": settings.provider, "model": settings.model,
+                "jev_model": settings.jev_model, "git_sha": git_sha,
+                "tau": settings.tau_delay, "evt_threshold": settings.evt_threshold,
                 "winner": g.winner, "days": g.day,
-                "focal_role": g.players[0].role, "majority_correct": lv.get("majority_correct"),
-                "trust_json": json.dumps(fl.get("trust", {}) if isinstance(fl, dict) else {}), "trace_json": json.dumps(fl.get("trace", {}) if isinstance(fl, dict) else {}, default=str)[:4000],
+                "focal_role": g.players[0].role,
+                "majority_correct": lv.get("majority_correct"),
+                "delay_cause": trace.get("delay_cause") if isinstance(trace, dict) else None,
+                "parse_fail": trace.get("parse_fail") if isinstance(trace, dict) else None,
+                "trust_json": json.dumps(fl.get("trust", {}) if isinstance(fl, dict) else {}),
+                "trace_json": json.dumps(fl.get("trace", {}) if isinstance(fl, dict) else {}, default=str)[:4000],
                 "prompt_tokens": dp, "completion_tokens": dc,
                 "est_cost_inr": _est_cost_inr(dp, dc),
+                "json_failures": dj,
                 "jev_stub": jev_info.get("stub") if isinstance(jev_info, dict) else None,
-            })
+            }
+            rows.append(row)
+            gdf = pd.DataFrame([row])
+            _upsert(os.path.join(run_dir, "games.parquet"), gdf, ["run_tag", "game_id"])
+            if not args.no_canonical:
+                _upsert(args.out, gdf, ["run_tag", "game_id"])
+            if getattr(g, "_vote_rows", None):
+                vdf = pd.DataFrame(g._vote_rows)
+                _upsert(os.path.join(run_dir, "votes.parquet"), vdf,
+                        ["run_tag", "game_id", "day", "voter"])
+                if not args.no_canonical:
+                    _upsert("logs/votes.parquet", vdf,
+                            ["run_tag", "game_id", "day", "voter"])
+            if getattr(g, "_trust_rows", None):
+                tdf = pd.DataFrame(g._trust_rows)
+                _upsert(os.path.join(run_dir, "trust.parquet"), tdf,
+                        ["run_tag", "game_id", "day", "agent", "target"])
+                if not args.no_canonical:
+                    _upsert("logs/trust.parquet", tdf,
+                            ["run_tag", "game_id", "day", "agent", "target"])
             # save raw history (speaker mixes int pids + "engine" -> normalize for parquet)
-            os.makedirs("logs/raw", exist_ok=True)
             hdf = pd.DataFrame(g.history)
             for _c in ("speaker", "phase"):
                 if _c in hdf.columns:
                     hdf[_c] = hdf[_c].astype(str)
-            hdf.to_parquet(f"logs/raw/history_{args.seed+i}-{focal}.parquet", index=False)
-    os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
-    pd.DataFrame(rows).to_parquet(args.out, index=False)
-    print(f"Saved {len(rows)} rows to {args.out}")
-    print(pd.DataFrame(rows)[["focal", "winner", "focal_role"]].value_counts(dropna=False))
-    if all_votes:
-        pd.DataFrame(all_votes).to_parquet("logs/votes.parquet", index=False)
-        print(f"Saved {len(all_votes)} per-day vote rows to logs/votes.parquet")
-    if all_trust:
-        pd.DataFrame(all_trust).to_parquet("logs/trust.parquet", index=False)
-        print(f"Saved {len(all_trust)} per-day trust rows to logs/trust.parquet")
+            hdf.to_parquet(os.path.join(run_dir, "raw", f"history_{run_id}.parquet"), index=False)
+            print(f"[{run_tag}] {run_id}: {g.winner} in {g.day} days "
+                  f"role={g.players[0].role} json_failures={dj}")
+
+    df = pd.DataFrame(rows)
+    if args.no_canonical:
+        print(f"\nSaved {len(rows)} rows to {run_dir}/games.parquet (canonical skipped)")
+    else:
+        print(f"\nSaved {len(rows)} rows to {args.out} and {run_dir}/games.parquet")
+    if len(df):
+        print(df[["focal", "winner", "focal_role"]].value_counts(dropna=False))
+    print(f"Run bundle: {run_dir}")
+
 
 if __name__ == "__main__":
     main()

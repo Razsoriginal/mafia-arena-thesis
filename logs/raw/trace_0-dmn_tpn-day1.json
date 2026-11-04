@@ -1,0 +1,1 @@
+{"trust": {"0": 0.5, "1": 0.5, "2": 0.5, "3": 0.5, "4": 0.5, "6": 0.5}, "trace": {"dmn": {}, "tpn": {}, "max_conf": 0, "top_suspect": null, "prev_majority": "no-lynch", "violation": 0.5, "threat": 0.5, "evt": 0.25, "delay": true, "commitment": "I will only vote with cited evidence (turn ids).", "reason_cached_before_discussion": true}}
