@@ -12,6 +12,10 @@ from openai import OpenAI
 
 from .config import settings
 
+class BillingExhausted(RuntimeError):
+    """Raised when the provider reports 402 / insufficient balance."""
+
+
 _client = None
 COST_LOG = {
     "calls": 0,
@@ -116,7 +120,12 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             return text
         except Exception as e:
             _log_error("chat_text", e)
-            if use_format and "response_format" in str(e).lower():
+            text_err = str(e).lower()
+            if "402" in text_err or "insufficient balance" in text_err:
+                # Never retry a payment failure: it silently turns every
+                # remaining game into a fallback-delay draw.
+                raise BillingExhausted(str(e)) from e
+            if use_format and "response_format" in text_err:
                 use_format = None  # provider without JSON mode: retry plain
                 continue
             if "empty content" in str(e) and max_tokens < 4000:

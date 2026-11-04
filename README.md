@@ -9,7 +9,7 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 # edit .env with your keys, keep AiCredits_Model=meta/muse-spark-1.3-contributor
 python -m src.eval.probe   # one call each to AiCredits + OpenRouter Jev
-python -m src.eval.run_arena --games 5 --agents dmn_tpn,cot --seed 0
+python -m src.eval.run_arena --games 5 --agents dmn_tpn,cot --seed 0 --workers 4
 python -m src.eval.evaluate --input logs/games.parquet
 streamlit run src/eval/dashboard.py  # live status, costs, docs
 ```
@@ -25,4 +25,4 @@ Jev gate: OpenRouter only — `OpenRouterJevAPIKey` + `OpenRouterJevModel` (`typ
 Comparative later: gpt-4o-mini, qwen3-8b, Fathom-R1-14B — change `AiCredits_Model`, no code change.
 
 ## Logs
-`logs/games.parquet` (per-game: tokens, `est_cost_inr`, `jev_stub`, model, git sha) + `logs/runs/<run_tag>/` (manifest, games, votes, trust, raw traces/history, llm_raw/llm_errors) + `logs/progress.jsonl` (per-day live status) + `logs/safety_audit.parquet` + `logs/raw/` — every LLM/gate call saved for thesis audit. Canonical parquet tables are upserted, never overwritten. Measured 2026-11-03: ~Rs.2.0 for a 2-day game with LLM night actions (budget ~Rs.5 per 5-day game).
+`logs/games.parquet` (per-game: tokens, `est_cost_inr`, `jev_stub`, model, git sha) + `logs/runs/<run_tag>/` (manifest, games, votes, trust, raw traces/history, llm_raw/llm_errors) + `logs/progress.jsonl` (per-day live status) + `logs/safety_audit.parquet` + `logs/raw/` — every LLM/gate call saved for thesis audit. Canonical parquet tables are upserted, never overwritten. Measured 2026-11-04: ~Rs.1.8–2.3 per game across parallel pilots (budget ~Rs.450 for 200 games). A 402 from AiCredits now aborts the run instead of producing fallback draws.

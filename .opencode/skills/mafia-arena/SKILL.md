@@ -13,7 +13,7 @@ Independent Mafia arena for AIWILD-style deception research.
 - `src/agents/dmn_tpn_agent.py` — DMN->TPN->EVT with DELAY gate (`TAU_DELAY`, `EVT_THRESHOLD` in `.env`).
 - `src/agents/jev_gate.py` — System-One gate (live): Jev noul/choice/score via OpenRouter (`OpenRouterJevAPIKey`/`OpenRouterJevModel`), `--gate llm|jev`.
 - `src/agents/baselines.py` — cot, react, constitution, same backbone.
-- `src/eval/run_arena.py` — `--games --agents --seed --out --gate --focal-role`. Saves `logs/games.parquet` (tokens, `est_cost_inr`, `jev_stub`) + `logs/progress.jsonl` + `logs/raw/history_*.parquet`.
+- `src/eval/run_arena.py` — `--games --agents --seed --workers --out --gate --night --max-days --no-canonical --focal-role`. Saves `logs/games.parquet` (tokens, `est_cost_inr`, `jev_stub`) + `logs/progress.jsonl` + `logs/raw/history_*.parquet`.
 - `src/eval/metrics.py` — brier, ece, cascade_resistance, delay_quality, say_do_gap.
 
 ## Rules

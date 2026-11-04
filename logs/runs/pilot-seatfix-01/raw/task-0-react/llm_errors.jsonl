@@ -1,0 +1,2 @@
+{"ts": 1793758907.8503451, "run_tag": "pilot-seatfix-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793759037.1753502, "run_tag": "pilot-seatfix-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

@@ -1,0 +1,3 @@
+{"ts": 1793758634.6338484, "run_tag": "pilot-seatfix-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793758844.336075, "run_tag": "pilot-seatfix-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793759017.8272967, "run_tag": "pilot-seatfix-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

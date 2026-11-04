@@ -87,5 +87,8 @@ def say_do_gap(votes_df: pd.DataFrame):
     df = df[df["vote"].astype(str) != "no-lynch"]
     if df.empty:
         return float("nan")
-    cited = df["vote_reason"].fillna("").astype(str).str.contains(TURN_CITE)
+    if "citation_valid" in df.columns:
+        cited = df["citation_valid"].fillna(False).astype(bool)
+    else:
+        cited = df["vote_reason"].fillna("").astype(str).str.contains(TURN_CITE)
     return float(1 - cited.mean())

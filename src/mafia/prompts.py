@@ -38,6 +38,16 @@ Your trust: {trust}
 Vote for a player id, or "no-lynch" only if no suspect stands out. Otherwise vote your strongest suspect: endless delay also loses games.
 JSON: {{"vote": "3", "reason": "..."}}"""
 
+VOTE_CITED_SYSTEM = "You vote in Mafia and must justify with observable turn ids. Reply JSON only."
+def vote_cited_user(player_id, role, history, trust):
+    return f"""You are Player {player_id} ({role}).
+History:
+{history}
+Your trust: {trust}
+Vote for a player id, or "no-lynch" only if no suspect stands out.
+Your commitment: you only vote with cited evidence. The reason MUST cite at least one history turn id exactly as written in the history (e.g. t12, t27). Do not invent turn ids.
+JSON: {{"vote": "3", "reason": "t12 shows ..."}}"""
+
 TRUST_SYSTEM = "Output trust scores. Reply JSON only."
 def trust_user(player_id, history, alive):
     return f"""You are Player {player_id}. Alive: {alive}. History: {history}

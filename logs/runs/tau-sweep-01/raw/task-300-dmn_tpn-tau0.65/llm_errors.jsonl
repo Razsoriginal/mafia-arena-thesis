@@ -1,0 +1,4 @@
+{"ts": 1793761511.981164, "run_tag": "tau-sweep-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793761650.6954834, "run_tag": "tau-sweep-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793761794.845973, "run_tag": "tau-sweep-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793761977.9182549, "run_tag": "tau-sweep-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

@@ -12,14 +12,15 @@ Rule: one variable per iteration. Every claim needs `logs/*.parquet` evidence.
 Exit: 5 clean games, JSON failures fall back to `no-lynch`, timeouts recorded as `"draw"`, no crashes.
 
 ## Phase 1 — MVP (Weeks 2-6)
-- `python -m src.eval.run_arena --games 50 --agents dmn_tpn,cot,react,constitution --seed 0`
+- `python -m src.eval.run_arena --games 50 --agents dmn_tpn,cot,react,constitution --seed 0 --workers 6`
 - Same backbone for all (`meta/muse-spark-1.3-contributor`). Freeze `src/mafia/engine.py`. Tune DMN exformation (2 unsaid points) + TPN evidence spans only.
 - Files: `src/agents/dmn_tpn_agent.py`, `src/mafia/prompts.py`, `logs/games.parquet`.
 Exit: 200 games. dmn_tpn beats baselines on win + delay-when-uncertain.
 
 ## Phase 2 — Measure + Improve (Weeks 7-10)
 Loop: `/eval` → hypothesis → one edit → 5-game retest → keep/revert.
-1. Calibration: `TAU_DELAY` sweep 0.55/0.65/0.75. Report ECE/Brier via `src/eval/metrics.py`.
+1. Calibration: `TAU_DELAY` sweep 0.45/0.55/0.65 (`--tau-sweep 0.45,0.55,0.65`). Report ECE/Brier via `src/eval/metrics.py`.
+   - Pilot 2026-11-04 (`logs/runs/tau-sweep-01/`, n=4/cell, dmn_tpn): tau 0.45 → 3/3 village wins, 0 JSON failures; 0.55 → 0/3; 0.65 → 1/3. Adopt 0.45.
 2. Ablations: no-exformation, no-EVT (never delay), no-TPN.
 3. Say-do-gap: count commitment violations in `vote_reason`; fix top pattern with one constraint.
 Exit: Thesis Ch.4-5 table — win-rate, ECE, cascade-resistance, delay-quality, say-do-gap per agent.

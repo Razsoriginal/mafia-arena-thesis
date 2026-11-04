@@ -31,7 +31,7 @@ src/
     types.py        # ProposedAction / GateResult contracts
   eval/
     metrics.py      # win_rate, ECE/Brier, cascade_resistance, delay_quality, say_do_gap
-    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --gate llm|jev --focal-role villager
+    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --workers 6 --gate llm|jev --focal-role villager
     dashboard.py    # streamlit run src/eval/dashboard.py — status, costs, results, docs
 logs/               # games.parquet, progress.jsonl, safety_audit.parquet, raw/history_*.parquet
 docs/               # SYNOPSIS? no — SYNOPSIS.md at root; docs/: DESIGN? no — root; docs/guide_slide.*, enterprise_integration.md, related_work.md
@@ -58,7 +58,7 @@ Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 * Expectation: predicted vote distribution from prior trust.
 * Violation: deviation = 1 - P(observed vote | expectation).
 * Threat: cost of wrong lynch (1 if village majority, else 0.5).
-* LLM-gate (MVP): If max_revised_confidence < TAU (default 0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
+* LLM-gate (MVP): If max_revised_confidence < TAU (default 0.45; pilot sweep 0.45/0.55/0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
 * Trust score = revised_confidence calibrated via Platt (fit later).
 * Jev-gate (System-One, live): same state sent to Jev `OpenRouterJevModel` (`typesafe/jev-1.14`) through OpenRouter in one round trip — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > JEV_THRESHOLD (0.6)` -> DELAY. Config is OpenRouter-only: `OpenRouterJevAPIKey` + `OpenRouterJevModel` (no BeatAI/systemone fallback, no key borrowing); a missing key logs a stub per call instead of delaying. Hybrid = LLM (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
 
@@ -66,7 +66,7 @@ Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 Every invocation writes `logs/runs/<run_tag>/`: `manifest.json` (provider, model, Jev model, thresholds, git sha), `games.parquet`, `votes.parquet`, `trust.parquet`, and `raw/trace_*.json` + `raw/history_*.parquet`. Canonical `logs/games.parquet`, `logs/votes.parquet`, `logs/trust.parquet` are upserted on `(run_tag, game_id, ...)` so a partial run keeps its evidence.
 
 `games(run_tag, game_id, seed, requested_seed, focal, gate, night_mode, provider, model, jev_model, git_sha, tau, evt_threshold, winner[village|mafia|draw], days, focal_role, majority_correct, delay_cause, parse_fail, trust_json, trace_json, prompt_tokens, completion_tokens, est_cost_inr, json_failures, jev_stub)`
-`votes(run_tag, game_id, day, voter, vote, majority_vote, majority_correct, is_focal, vote_reason, commitment, parse_fail, delay_cause, jev_stub, provider, model, night_mode)`
+`votes(run_tag, game_id, day, voter, vote, majority_vote, majority_correct, is_focal, focal_pid, vote_reason, cited_turns, citation_valid, commitment, parse_fail, delay_cause, jev_stub, provider, model, night_mode)`
 `trust(run_tag, game_id, day, agent, target, trust, target_is_mafia, provider, model)`
 `safety_audit(action, target, actor, reversible, decision, noul, threat, confidence, backend, reason)` → `logs/safety_audit.parquet` via `src/safety/audit.py`
 `logs/progress.jsonl`: one line per game-day (run_tag, run_id, seed, day, alive, winner-so-far) for live monitoring.
@@ -78,7 +78,7 @@ Raw responses go to `logs/runs/<run_tag>/raw/llm_raw.jsonl` (text + JSON, includ
 * calibrated trust: ECE (10 bins) + Brier between trust and ground-truth mafia label.
 * cascade_resistance: when majority vote is wrong, % our agent's real lynch votes that did NOT follow it (abstentions excluded; they belong to delay_quality).
 * delay_quality: % focal delays that avoided a wrong plurality lynch, excluding `delay_cause=json_failure` (fallbacks are not EVT decisions) and days with no plurality target.
-* say_do_gap: % real lynch votes that violate a stated evidence commitment (reason has no `t12` / `turn 12` / `turn id` citation). Abstentions are consistent with the commitment and excluded. Lower is better.
+* say_do_gap: % real lynch votes that violate a stated evidence commitment (reason has no valid history turn id; citations are checked against the game's actual turns, so hallucinated ids count as a gap). Abstentions are consistent with the commitment and excluded. Lower is better.
 
 ### 7. Comparative models + Jev plan (after MVP)
 | Phase | Model | Purpose |
@@ -91,7 +91,8 @@ Raw responses go to `logs/runs/<run_tag>/raw/llm_raw.jsonl` (text + JSON, includ
 Run 10 seeds x 4 agents to show backbone-agnostic gain. No prompt change. `--focal-role` re-seeds (bounded) for role-balanced cells.
 
 ### 8. Risks
-* LLM cost blow-up -> measured Rs.2.0 for a 2-day game with LLM night actions (2026-11-03); budget ~Rs.5/game for 5 days, ~Rs.1,000 for the 200-game MVP. Cap history window / rounds before scaling if needed.
+* LLM cost blow-up -> measured ~Rs.1.8–2.3/game across the 2026-11-04 parallel pilots (tau 0.45, 1–3 day games); budget ~Rs.450 for the 200-game MVP. Cap history window / rounds before scaling if needed.
+* Provider credit exhaustion -> a 402 is fatal: the client raises `BillingExhausted` and the arena cancels remaining games instead of turning them into fallback-delay draws.
 * Reasoning-model empty content -> `LLM_MAX_TOKENS=2500` recommended; an empty answer is retried with a larger budget, and reasoning text is logged separately for audit, never used as the answer. Every retry lands in `logs/raw/llm_errors.jsonl`.
 * All-delay draws -> vote prompt delays only without a standout suspect; timeout games recorded as `"draw"`, kept visible in summaries.
 * Jev availability -> OpenRouter-only config; a missing key or error logs a stub with the reason and does not delay. `JEV_MIN_INTERVAL_S` is 0 unless set.

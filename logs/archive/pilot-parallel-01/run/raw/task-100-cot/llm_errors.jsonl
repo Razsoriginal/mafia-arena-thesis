@@ -1,0 +1,5 @@
+{"ts": 1793756654.8529553, "run_tag": "pilot-parallel-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793756746.296235, "run_tag": "pilot-parallel-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793756927.3649902, "run_tag": "pilot-parallel-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793757036.2206345, "run_tag": "pilot-parallel-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793757066.1738985, "run_tag": "pilot-parallel-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=3500)", "raw": ""}
