@@ -37,12 +37,15 @@ from src.mafia.engine import Game
 AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent, "dmn_tpn": DmnTpnAgent}
 
 # AiCredits catalog rates (USD/token) + INR/USD for meta/muse-spark-1.3-contributor.
-_MUSE_IN, _MUSE_OUT, _INR_PER_USD = 1e-07, 2e-07, 95.319179
+# Billing adds a 10% markup on the listed token rates (verified against usage.cost).
+_MUSE_IN, _MUSE_OUT, _INR_PER_USD = 1e-07, 2e-07, 94.834253
+_BILLING_MARKUP = 1.10
 _TURN_ID = re.compile(r"\bt(\d+)\b", re.IGNORECASE)
 
 
 def _est_cost_inr(prompt_tokens: int, completion_tokens: int) -> float:
-    return round((prompt_tokens * _MUSE_IN + completion_tokens * _MUSE_OUT) * _INR_PER_USD, 4)
+    return round((prompt_tokens * _MUSE_IN + completion_tokens * _MUSE_OUT)
+                 * _INR_PER_USD * _BILLING_MARKUP, 4)
 
 
 def _git_sha() -> str:
@@ -375,6 +378,7 @@ def _run_task(task: dict) -> dict:
     dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
     dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
     dj = COST_LOG["json_failures"] - mark["json_failures"]
+    dc_inr = COST_LOG["cost_inr"] - mark["cost_inr"]
     lv = getattr(g, "_last_votes", {})
     fl = getattr(g, "_focal_last", {}) or {}
     trace = fl.get("trace", {}) if isinstance(fl, dict) else {}
@@ -396,7 +400,8 @@ def _run_task(task: dict) -> dict:
         "trust_json": json.dumps(fl.get("trust", {}) if isinstance(fl, dict) else {}),
         "trace_json": json.dumps(fl.get("trace", {}) if isinstance(fl, dict) else {}, default=str)[:4000],
         "prompt_tokens": dp, "completion_tokens": dc,
-        "est_cost_inr": _est_cost_inr(dp, dc),
+        "est_cost_inr": round(dc_inr, 4) if dc_inr > 0 else _est_cost_inr(dp, dc),
+        "billed_cost_inr": round(dc_inr, 4),
         "json_failures": dj,
         "jev_stub": jev_info.get("stub") if isinstance(jev_info, dict) else None,
     }

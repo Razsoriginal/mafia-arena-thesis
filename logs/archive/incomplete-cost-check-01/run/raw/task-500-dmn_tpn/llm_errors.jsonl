@@ -1,0 +1,2 @@
+{"ts": 1793796073.412906, "run_tag": "cost-check-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793796277.3901944, "run_tag": "cost-check-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

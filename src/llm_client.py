@@ -22,6 +22,7 @@ COST_LOG = {
     "prompt_tokens": 0,
     "completion_tokens": 0,
     "json_failures": 0,
+    "cost_inr": 0.0,
 }
 
 
@@ -106,6 +107,10 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             try:
                 COST_LOG["prompt_tokens"] += resp.usage.prompt_tokens
                 COST_LOG["completion_tokens"] += resp.usage.completion_tokens
+                # Provider-reported INR charge (includes AiCredits markup).
+                billed = getattr(resp.usage, "cost", None)
+                if billed is not None:
+                    COST_LOG["cost_inr"] += float(billed)
             except Exception:
                 pass
             reasoning = _reasoning(resp)
