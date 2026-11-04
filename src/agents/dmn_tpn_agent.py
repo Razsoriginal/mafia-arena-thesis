@@ -46,8 +46,10 @@ class DmnTpnAgent(BaseAgent):
             m = sum(1 for r in alive_roles.values() if r == "mafia")
             o = max(1, len(alive_roles) - m)
             threat = min(1.0, m / o)
+            prior_innocent = round(o / len(alive_roles), 3)
         else:
             threat = 0.8  # legacy fallback when role counts unavailable
+            prior_innocent = 0.5
         evt = violation * threat
         if parse_fail:
             delay_cause = "json_failure"
@@ -58,18 +60,21 @@ class DmnTpnAgent(BaseAgent):
         else:
             delay_cause = None
         delay = delay_cause is not None
-        # Trust for EVERY alive player (1 = innocent), default 0.5 unverified.
+        # Trust for EVERY alive player (1 = innocent); unverified = base rate.
         trust = {}
         for pid in alive:
             if str(pid) in conf_by_suspect:
                 trust[str(pid)] = round(1 - conf_by_suspect[str(pid)], 3)
             else:
-                trust[str(pid)] = 0.5
+                # Base-rate prior instead of a flat 0.5: with 5/7 innocents,
+                # an unverified player is more likely innocent than not.
+                trust[str(pid)] = prior_innocent
         self._plan = (f"Top suspect: {top_suspect} (confidence {max_conf:.2f}). "
                       f"Delay={'yes' if delay else 'no'} (evt {evt:.2f}).")
         trace = {"dmn": dmn, "tpn": tpn, "max_conf": max_conf,
                  "top_suspect": top_suspect, "prev_majority": prev_majority,
                  "violation": violation, "threat": threat, "evt": evt,
+                 "prior_innocent": prior_innocent,
                  "delay": delay, "delay_cause": delay_cause,
                  "parse_fail": parse_fail,
                  "dmn_meta": dmn_meta, "tpn_meta": tpn_meta,

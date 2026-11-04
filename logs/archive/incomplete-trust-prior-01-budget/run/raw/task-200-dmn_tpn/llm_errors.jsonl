@@ -1,0 +1,3 @@
+{"ts": 1793794604.7071488, "run_tag": "trust-prior-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793794760.547036, "run_tag": "trust-prior-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793794921.1869442, "run_tag": "trust-prior-01", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 402 - API Key Budget Exceeded. Raise this key's budget at https://aicredits.in/dashboard/keys", "raw": ""}
