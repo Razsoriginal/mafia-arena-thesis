@@ -1,6 +1,13 @@
 # Mafia Arena — Independent Thesis Repo
 Independent clean-room replication inspired by Fractal Cerebral AIWILD 2026 announcement. No proprietary code.
 
+## Status (2026-11-04)
+Pilot validated: **14 clean games**, 4 agents, `TAU_DELAY=0.35`, 1 JSON failure, Rs.30.92
+billed (~Rs.2.2/game). Calibration is strong (ECE 0.105, Brier 0.193) and say-do gap is
+0.0, but the win-rate advantage over CoT is **not established at n=14**. Next: the
+200-game MVP, then ablations and the Jev gate. Full status and evidence map:
+[`TRACKER.md`](./TRACKER.md).
+
 ## Quickstart
 ```powershell
 python -m venv .venv
@@ -9,12 +16,13 @@ pip install -r requirements.txt
 Copy-Item .env.example .env
 # edit .env with your keys, keep AiCredits_Model=meta/muse-spark-1.3-contributor
 python -m src.eval.probe   # one call each to AiCredits + OpenRouter Jev
-python -m src.eval.run_arena --games 5 --agents dmn_tpn,cot --seed 0 --workers 4
+python -m src.eval.run_arena --games 5 --agents dmn_tpn,cot,react,constitution --seed 0 --workers 4 --tau 0.35
 python -m src.eval.evaluate --input logs/games.parquet
 streamlit run src/eval/dashboard.py  # live status, costs, docs
 ```
 
 ## Structure
+* `TRACKER.md` — live status: done, metrics, open issues, next steps, scope of improvement.
 * `SYNOPSIS.md` — university synopsis. `DESIGN.md` — architecture + EVT/Jev. `ROADMAP.md` — phases + exit criteria.
 * `docs/related_work.md` — Ch.2 evidence table (crowded vs gaps). `docs/enterprise_integration.md` — safety framework + recalibration. `docs/guide_slide.*` — 1-slide.
 * `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` drop-in gate (`gate.py`, `middleware.py`, `audit.py`), `src/eval/` arena + metrics + `dashboard.py` (Streamlit status/cost/docs).

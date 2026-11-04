@@ -5,8 +5,10 @@ MSc AI Part-2 thesis (Mumbai University) + Fractal data engineer side-project.
 Independent clean-room replication inspired by Fractal Cerebral AIWILD 2026 paper (DMN+TPN+EVT, Mafia game, exformation).
 No proprietary code/data. Primary backbone: AiCredits only — `AiCredits_Base_Url=https://aicredits.in/v1`, `Aicredits_API_Key`, `AiCredits_Model` (default `meta/muse-spark-1.3-contributor`; cheap, high-intelligence, System-2; needs `LLM_MAX_TOKENS=2500` recommended). Jev System-One gate: OpenRouter only — `OpenRouterJevAPIKey` + `OpenRouterJevModel` (`typesafe/jev-1.14`): choice/score/noul for calibrated DELAY. Comparative later: gpt-4o-mini, qwen3-8b, Fathom-R1-14B.
 
-Docs: `SYNOPSIS.md` (university synopsis), `DESIGN.md` (architecture), `README.md` (quickstart), `ROADMAP.md` (phases), `docs/related_work.md` (Ch.2), `docs/enterprise_integration.md` (safety framework), `docs/guide_slide.*` (1-slide).
-Code: `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` gate/middleware/audit, `src/eval/` arena runner + metrics + `dashboard.py` (`streamlit run src/eval/dashboard.py`). Logs: `logs/games.parquet` (tokens, `est_cost_inr`, `jev_stub`, `model`, `git_sha`) + `logs/runs/<run_tag>/` (manifest + games/votes/trust + raw traces/LLM logs) + `logs/progress.jsonl` + `logs/safety_audit.parquet` (legacy `logs/raw/` stays).
+Docs: `TRACKER.md` (live status: done/metrics/next/improvement), `SYNOPSIS.md` (university synopsis), `DESIGN.md` (architecture), `README.md` (quickstart), `ROADMAP.md` (phases), `docs/related_work.md` (Ch.2), `docs/enterprise_integration.md` (safety framework), `docs/guide_slide.*` (1-slide).
+Code: `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` gate/middleware/audit, `src/eval/` arena runner + metrics + `evaluate.py` + `dashboard.py` (`streamlit run src/eval/dashboard.py`). Logs: `logs/games.parquet` (tokens, `est_cost_inr`, `billed_cost_inr`, `jev_stub`, `model`, `git_sha`) + `logs/runs/<run_tag>/` (manifest + games/votes/trust + raw traces/LLM logs) + `logs/progress.jsonl` + `logs/safety_audit.parquet` (legacy `logs/raw/` stays).
+
+Current status (2026-11-04): 14 clean pilot games, tau 0.35, ECE 0.105, 1 JSON failure, Rs.30.92. Next: 200-game MVP, 20-game ablations, 10-game Jev run. Details in `TRACKER.md`.
 
 ## How to work in opencode terminal
 - Default model is muse-spark-1.3-contributor-free. Keep responses short, factual, no emojis unless asked.

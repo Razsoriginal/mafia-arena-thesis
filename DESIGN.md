@@ -32,6 +32,7 @@ src/
   eval/
     metrics.py      # win_rate, ECE/Brier, cascade_resistance, delay_quality, say_do_gap
     run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --workers 6 --tau 0.35 --ablate exformation,tpn,evt --gate llm|jev --focal-role villager
+    evaluate.py     # python -m src.eval.evaluate --input logs/games.parquet
     dashboard.py    # streamlit run src/eval/dashboard.py — status, costs, results, docs
 logs/               # games.parquet, progress.jsonl, safety_audit.parquet, raw/history_*.parquet
 docs/               # SYNOPSIS? no — SYNOPSIS.md at root; docs/: DESIGN? no — root; docs/guide_slide.*, enterprise_integration.md, related_work.md
@@ -105,3 +106,16 @@ Run 10 seeds x 4 agents to show backbone-agnostic gain. No prompt change. `--foc
 ### 9. Enterprise framework + acceptance
 * `src/safety/` is the shippable artifact: wrap any tool with `guard_tool()` — see `docs/enterprise_integration.md` (10-line pattern + recalibration checklist).
 * Workshop fit: AIWILD short paper needs win-rate + ECE/Brier + cascade/delay/say-do + ablations + transfer + open logs — see `docs/related_work.md` for crowded vs empty areas (exformation 1 paper, Jev 0 papers).
+
+### 10. Current implementation status (2026-11-04)
+* **Built and exercised:** engine, LLM client with retry/repair/cost ledger, DMN/TPN/EVT agent,
+  three baselines, trust prior, tau sweep, parallel workers, ablations, per-run bundles,
+  canonical upsert, dashboard.
+* **Built but not yet exercised live:** Jev gate (`--gate jev`), `src/safety/` on real data.
+* **Canonical evidence:** 14 clean games (`pilot-clean-02` + `pilot-clean-03`), tau 0.35,
+  ECE 0.105 / Brier 0.193 (n=41), 1 JSON failure, Rs.30.92 total. Win-rate signal is not
+  established at that n.
+* **Known gaps before the 200-game MVP:** role balance (no mafia-focal dmn game yet),
+  say-do-gap n is only 3 focal lynch votes, baseline commitment protocol is asymmetric,
+  game length averages 2.1 of 5 days, and no pytest/CI suite.
+* Live status, evidence map and next actions: [`TRACKER.md`](./TRACKER.md).

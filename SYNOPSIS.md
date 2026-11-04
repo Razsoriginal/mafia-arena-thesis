@@ -63,7 +63,20 @@ Dialogue history -> DMN (muse-spark via AiCredits): hypothesise motives + exform
 * M6: Full 200-game run + analysis + thesis writing
 * M7-9: Buffer, guide review, publication draft
 
-### 8. References (starter)
+### 8. Progress Snapshot (2026-11-04)
+* **Implementation:** 7-player arena, DMN/TPN/EVT agent, CoT/ReAct/Constitution baselines,
+  trust prior, tau sweep, parallel workers, ablations, Jev gate and the safety framework are
+  implemented. Jev and `src/safety/` are built but not yet exercised on live evaluation runs.
+* **Pilot evidence:** 14 clean games on `meta/muse-spark-1.3-contributor` (tau 0.35), 1 JSON
+  failure, Rs.30.92 billed (~Rs.2.2/game). ECE 0.105, Brier 0.193 (n=41), cascade resistance
+  0.333, delay quality 0.75, say-do gap 0.0 (n=3 focal lynch votes).
+* **Win-rate:** dmn_tpn 2/4 non-mafia focal village wins, cot 2/3, constitution 1/2, react 0/3.
+  The advantage is not established at n=14; the 200-game MVP is the next step, followed by
+  20-game ablation cells and a 10-game Jev comparison.
+* **Limitations to address:** sample size, role balance, short games (~2.1 days), asymmetric
+  commitment protocol for baselines. Live status: `TRACKER.md`; evidence: `logs/`.
+
+### 9. References (starter)
 * AIWILD NeurIPS 2026 CFP; ICLR 2026 AIWILD proceedings (OS-Sentinel, AgentHallu).
 * SBSC (Singh et al. ICLR 2025), No Stress No Gain (VerifAI 2025), Fathom-DeepResearch (2509.24107), TRISHUL (2502.08226).
 * Jev: OpenRouter-hosted `typesafe/jev-1.14` (choice/score/noul); TypeSafe AI System-One model family (RLCD calibration).
