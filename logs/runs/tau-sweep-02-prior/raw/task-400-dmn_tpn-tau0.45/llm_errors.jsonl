@@ -1,0 +1,7 @@
+{"ts": 1793801362.7343938, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793801507.3440742, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793801982.4818954, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793802167.7979865, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793802261.9955711, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793802366.0409307, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793802483.330153, "run_tag": "tau-sweep-02-prior", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

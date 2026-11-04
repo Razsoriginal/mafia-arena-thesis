@@ -1,0 +1,11 @@
+{"ts": 1793804850.4000776, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804853.669565, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804859.084389, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804860.3360384, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793805451.7912567, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805593.0150902, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805689.8950338, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793805793.657147, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793806028.201385, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793806130.7305167, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793806240.7941372, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

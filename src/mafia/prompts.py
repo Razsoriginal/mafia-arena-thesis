@@ -4,13 +4,23 @@ DMN_SYSTEM = """You are the imaginative mind (DMN) of a Mafia player. Infer hidd
 List what is UNSAID / implied / omitted (exformation): evasions, missing alibis, who benefits.
 Reply JSON only."""
 
-def dmn_user(player_id, role, history, alive):
+DMN_NO_EXFORMATION_SYSTEM = """You are the imaginative mind (DMN) of a Mafia player.
+Infer hidden motives from the dialogue and votes. Reply JSON only."""
+
+def dmn_user(player_id, role, history, alive, exformation=True):
+    if exformation:
+        task = ("Task: propose 2-3 hypotheses about who is mafia.\n"
+                "For each: suspect, motive, exformation (2 unsaid/implied points + who benefits), confidence 0-1.\n"
+                'JSON: {"hypotheses": [{"suspect": "3", "motive": "...", '
+                '"exformation": ["...", "..."], "confidence": 0.7}]}')
+    else:
+        task = ("Task: propose 2-3 hypotheses about who is mafia.\n"
+                "For each: suspect, motive, confidence 0-1.\n"
+                'JSON: {"hypotheses": [{"suspect": "3", "motive": "...", "confidence": 0.7}]}')
     return f"""You are Player {player_id} ({role}). Alive: {alive}.
 History:
 {history}
-Task: propose 2-3 hypotheses about who is mafia.
-For each: suspect, motive, exformation (2 unsaid/implied points + who benefits), confidence 0-1.
-JSON: {{"hypotheses": [{{"suspect": "3", "motive": "...", "exformation": ["...", "..."], "confidence": 0.7}}]}}"""
+{task}"""
 
 TPN_SYSTEM = """You are the verifier mind (TPN). Verify hypotheses against OBSERVABLE facts only.
 Cite turn ids. No hallucinated evidence. Reply JSON only."""

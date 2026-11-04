@@ -1,0 +1,1 @@
+{"ts": 1793811229.2199426, "run_tag": "pilot-clean-03", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}

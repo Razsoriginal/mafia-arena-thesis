@@ -91,7 +91,9 @@ def chat_text(system: str, user: str, temperature: float | None = None,
     temp = settings.temp_dialogue if temperature is None else temperature
     use_format = response_format
     max_tokens = settings.max_tokens
-    for attempt in range(3):
+    # 5 attempts: long games hit transient connection errors often enough
+    # that 3 attempts silently turns a vote into a fallback delay.
+    for attempt in range(5):
         try:
             kwargs = {
                 "model": settings.model,
@@ -137,9 +139,9 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                 # Reasoning models can spend the whole budget before answering.
                 max_tokens = min(4000, max_tokens + 1000)
                 continue
-            if attempt == 2:
+            if attempt == 4:
                 return ""
-            time.sleep(2 * (attempt + 1))
+            time.sleep(min(16, 2 ** (attempt + 1)))
     return ""
 
 

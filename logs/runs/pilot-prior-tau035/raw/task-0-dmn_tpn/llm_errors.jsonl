@@ -1,0 +1,5 @@
+{"ts": 1793804849.9739244, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804853.379144, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804858.696643, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804859.9939117, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793805230.9222288, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}

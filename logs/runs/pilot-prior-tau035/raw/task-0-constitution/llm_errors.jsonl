@@ -1,0 +1,12 @@
+{"ts": 1793804850.3631938, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804853.642058, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804859.0562177, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804860.4104257, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Connection error.", "raw": ""}
+{"ts": 1793804910.2532434, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805191.1868565, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805282.810396, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793805378.2068605, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793805404.0524683, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805509.1637247, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "empty content (max_tokens=2500)", "raw": ""}
+{"ts": 1793805605.4379182, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}
+{"ts": 1793805715.6933124, "run_tag": "pilot-prior-tau035", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "error": "Error code: 500", "raw": ""}

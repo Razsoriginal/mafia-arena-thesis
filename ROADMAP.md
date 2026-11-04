@@ -19,9 +19,12 @@ Exit: 200 games. dmn_tpn beats baselines on win + delay-when-uncertain.
 
 ## Phase 2 — Measure + Improve (Weeks 7-10)
 Loop: `/eval` → hypothesis → one edit → 5-game retest → keep/revert.
-1. Calibration: `TAU_DELAY` sweep 0.45/0.55/0.65 (`--tau-sweep 0.45,0.55,0.65`). Report ECE/Brier via `src/eval/metrics.py`.
-   - Pilot 2026-11-04 (`logs/runs/tau-sweep-01/`, n=4/cell, dmn_tpn): tau 0.45 → 3/3 village wins, 0 JSON failures; 0.55 → 0/3; 0.65 → 1/3. Adopt 0.45.
-2. Ablations: no-exformation, no-EVT (never delay), no-TPN.
+1. Calibration: `TAU_DELAY` sweep 0.30/0.35/0.45 (`--tau-sweep 0.30,0.35,0.45`). Report ECE/Brier via `src/eval/metrics.py`.
+   - Pilot 2026-11-04 (`logs/runs/tau-sweep-01/`, n=4/cell, dmn_tpn): tau 0.45 → 3/3 village wins, 0 JSON failures; 0.55 → 0/3; 0.65 → 1/3.
+   - With base-rate trust prior (`logs/runs/tau-sweep-02-prior/`, n=5/cell): tau 0.35 → 4/5 village, 3/3 non-mafia, ECE 0.154; 0.45 → 2/5, ECE 0.128; 0.30 → 2/5, ECE 0.175. Adopt 0.35.
+   - 20-game all-agent pilot at 0.35 (`logs/runs/pilot-prior-tau035/`, n=5/focal): dmn_tpn 2/4 non-mafia village wins vs 1/4 for cot/react/constitution; ECE 0.126; say_do_gap 0.0 (4/4 valid citations). Noisy: 15 JSON failures/20 from provider connection/empty errors.
+   - Clean 14-game set (`logs/runs/pilot-clean-02/` + `pilot-clean-03/`, 5-attempt retry): 1 JSON failure; dmn_tpn 2/4 non-mafia village wins vs cot 2/3, constitution 1/2, react 0/3; ECE 0.105; Brier 0.193; say_do_gap 0.0 (3/3 valid citations). Win-rate advantage over cot is not established at n=14; the 200-game MVP is needed.
+2. Ablations (implemented: `--ablate exformation,tpn,evt`): no-exformation, no-TPN, no-EVT (never delay).
 3. Say-do-gap: count commitment violations in `vote_reason`; fix top pattern with one constraint.
 Exit: Thesis Ch.4-5 table — win-rate, ECE, cascade-resistance, delay-quality, say-do-gap per agent.
 

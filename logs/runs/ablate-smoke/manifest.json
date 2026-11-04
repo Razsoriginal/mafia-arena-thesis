@@ -1,0 +1,40 @@
+{
+  "run_tag": "ablate-smoke",
+  "started_at": "2026-11-04T17:18:36.157113+00:00",
+  "git_sha": "f729c57",
+  "args": {
+    "games": 1,
+    "agents": "dmn_tpn",
+    "seed": 0,
+    "gate": "llm",
+    "night": "llm",
+    "focal_role": "random",
+    "run_tag": "ablate-smoke",
+    "max_days": 1,
+    "workers": 1,
+    "tau": 0.35,
+    "tau_sweep": null,
+    "ablate": "exformation,tpn,evt",
+    "no_canonical": true,
+    "out": "logs/games.parquet"
+  },
+  "llm": {
+    "provider": "aicredits",
+    "base_url": "https://aicredits.in/v1",
+    "model": "meta/muse-spark-1.3-contributor",
+    "max_tokens": 2500,
+    "temperature_dialogue": 0.3,
+    "temperature_json": 0.0
+  },
+  "jev": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "typesafe/jev-1.14",
+    "key_present": true,
+    "min_interval_s": 0.0,
+    "threshold": 0.6
+  },
+  "thresholds": {
+    "tau_delay": 0.35,
+    "evt_threshold": 0.6
+  }
+}

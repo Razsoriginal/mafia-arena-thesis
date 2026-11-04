@@ -9,9 +9,10 @@ COMMITMENT = "I will only vote with cited evidence (turn ids)."
 
 class DmnTpnAgent(BaseAgent):
     name = "dmn_tpn"
-    def __init__(self, pid, backend: str = "llm"):
+    def __init__(self, pid, backend: str = "llm", ablate=None):
         super().__init__(pid)
         self.backend = backend  # llm | jev (EVT DELAY source)
+        self.ablate = set(ablate or ())  # exformation | tpn | evt
         self._alive: list = []
         self._plan: str = ""  # cached by reason(), used by speak() same day
 
@@ -22,18 +23,29 @@ class DmnTpnAgent(BaseAgent):
     def reason(self, role, history, facts, alive, prev_majority=None, alive_roles=None):
         self._alive = list(alive)
         dmn_meta, tpn_meta = {}, {}
-        dmn = llm.chat_json(P.DMN_SYSTEM, P.dmn_user(self.pid, role, history, alive),
-                            meta=dmn_meta)
-        tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts),
-                            meta=tpn_meta)
-        parse_fail = bool(dmn_meta.get("parse_fail") or tpn_meta.get("parse_fail"))
-        verified = tpn.get("verified", [])
+        use_exf = "exformation" not in self.ablate
+        dmn = llm.chat_json(
+            P.DMN_SYSTEM if use_exf else P.DMN_NO_EXFORMATION_SYSTEM,
+            P.dmn_user(self.pid, role, history, alive, exformation=use_exf),
+            meta=dmn_meta)
         conf_by_suspect = {}
-        for v in verified:
-            try:
-                conf_by_suspect[str(v["suspect"])] = float(v.get("revised_confidence", 0))
-            except Exception:
-                pass
+        if "tpn" in self.ablate:
+            tpn = {}
+            tpn_meta = {"ablation": "tpn"}
+            for h in dmn.get("hypotheses", []):
+                try:
+                    conf_by_suspect[str(h["suspect"])] = float(h.get("confidence", 0))
+                except Exception:
+                    pass
+        else:
+            tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts),
+                                meta=tpn_meta)
+            for v in tpn.get("verified", []):
+                try:
+                    conf_by_suspect[str(v["suspect"])] = float(v.get("revised_confidence", 0))
+                except Exception:
+                    pass
+        parse_fail = bool(dmn_meta.get("parse_fail") or tpn_meta.get("parse_fail"))
         max_conf = max(conf_by_suspect.values(), default=0)
         top_suspect = max(conf_by_suspect, key=conf_by_suspect.get, default=None)
         # EVT: expectation (yesterday's majority) vs violation (deviation).
@@ -51,7 +63,9 @@ class DmnTpnAgent(BaseAgent):
             threat = 0.8  # legacy fallback when role counts unavailable
             prior_innocent = 0.5
         evt = violation * threat
-        if parse_fail:
+        if "evt" in self.ablate:
+            delay_cause = None  # ablation: never delay
+        elif parse_fail:
             delay_cause = "json_failure"
         elif max_conf < settings.tau_delay:
             delay_cause = "low_confidence"
@@ -76,6 +90,7 @@ class DmnTpnAgent(BaseAgent):
                  "violation": violation, "threat": threat, "evt": evt,
                  "prior_innocent": prior_innocent,
                  "delay": delay, "delay_cause": delay_cause,
+                 "ablate": sorted(self.ablate),
                  "parse_fail": parse_fail,
                  "dmn_meta": dmn_meta, "tpn_meta": tpn_meta,
                  "commitment": COMMITMENT,

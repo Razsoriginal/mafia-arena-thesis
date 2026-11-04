@@ -210,7 +210,7 @@ def _night_actions(game, agents, seed, day, night_mode, det_info):
 
 def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random",
              night_mode="llm", run_tag="", run_dir="logs/runs/tmp", requested_seed=None,
-             max_days=5):
+             max_days=5, ablate=None):
     game, _, focal_pid = _make_game(seed, focal_role)
     run_id = run_id or f"{game.seed}-{focal}"
     requested_seed = seed if requested_seed is None else requested_seed
@@ -222,7 +222,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
     agents = {}
     for p in game.players:
         cls = AGENTS[focal] if p.pid == focal_pid else AGENTS["cot"]
-        ag = cls(pid=p.pid)
+        ag = cls(pid=p.pid, ablate=ablate) if cls is DmnTpnAgent else cls(pid=p.pid)
         if isinstance(ag, DmnTpnAgent):
             ag.backend = gate
         agents[p.pid] = ag
@@ -373,7 +373,7 @@ def _run_task(task: dict) -> dict:
         run_id=task["run_id"], focal_role=task["focal_role"],
         night_mode=task["night_mode"], run_tag=task["run_tag"],
         run_dir=task["run_dir"], requested_seed=task["requested_seed"],
-        max_days=task["max_days"],
+        max_days=task["max_days"], ablate=task.get("ablate"),
     )
     dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
     dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
@@ -392,6 +392,7 @@ def _run_task(task: dict) -> dict:
         "provider": settings.provider, "model": settings.model,
         "jev_model": settings.jev_model, "git_sha": task["git_sha"],
         "tau": settings.tau_delay, "evt_threshold": settings.evt_threshold,
+        "ablate": ",".join(task.get("ablate") or []),
         "winner": g.winner, "days": g.day,
         "focal_role": g.players[focal_pid].role,
         "majority_correct": lv.get("majority_correct"),
@@ -453,12 +454,18 @@ def main():
                     help="override TAU_DELAY for this run")
     ap.add_argument("--tau-sweep", type=str, default=None,
                     help="comma-separated TAU_DELAY values; repeats the dmn_tpn cells per tau")
+    ap.add_argument("--ablate", type=str, default="",
+                    help="comma-separated dmn_tpn ablations: exformation,tpn,evt")
     ap.add_argument("--no-canonical", action="store_true",
                     help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
     args = ap.parse_args()
     if args.tau is not None:
         settings.tau_delay = args.tau
+    ablations = sorted({x.strip() for x in args.ablate.split(",") if x.strip()})
+    unknown = set(ablations) - {"exformation", "tpn", "evt"}
+    if unknown:
+        ap.error(f"unknown ablation(s): {', '.join(sorted(unknown))}")
 
     run_tag = args.run_tag or time.strftime("%Y%m%d-%H%M%S")
     os.environ["MAFIA_RUN_TAG"] = run_tag
@@ -491,6 +498,7 @@ def main():
                     "run_dir": run_dir,
                     "max_days": args.max_days,
                     "tau": tau,
+                    "ablate": ablations,
                     "git_sha": git_sha,
                 })
 

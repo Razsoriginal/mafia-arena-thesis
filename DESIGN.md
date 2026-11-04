@@ -31,7 +31,7 @@ src/
     types.py        # ProposedAction / GateResult contracts
   eval/
     metrics.py      # win_rate, ECE/Brier, cascade_resistance, delay_quality, say_do_gap
-    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --workers 6 --gate llm|jev --focal-role villager
+    run_arena.py    # python -m src.eval.run_arena --games 50 --agents all --seed 0 --workers 6 --tau 0.35 --ablate exformation,tpn,evt --gate llm|jev --focal-role villager
     dashboard.py    # streamlit run src/eval/dashboard.py — status, costs, results, docs
 logs/               # games.parquet, progress.jsonl, safety_audit.parquet, raw/history_*.parquet
 docs/               # SYNOPSIS? no — SYNOPSIS.md at root; docs/: DESIGN? no — root; docs/guide_slide.*, enterprise_integration.md, related_work.md
@@ -58,8 +58,8 @@ Determinism: role assignment rotates by seed; engine RNG seeded; LLM temp fixed.
 * Expectation: predicted vote distribution from prior trust.
 * Violation: deviation = 1 - P(observed vote | expectation).
 * Threat: cost of wrong lynch (1 if village majority, else 0.5).
-* LLM-gate (MVP): If max_revised_confidence < TAU (default 0.45; pilot sweep 0.45/0.55/0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
-* Trust score = revised_confidence calibrated via Platt (fit later).
+* LLM-gate (MVP): If max_revised_confidence < TAU (default 0.35; pilot sweeps 0.30/0.35/0.45 and 0.45/0.55/0.65) OR threat*violation > 0.6 -> action=DELAY (vote no-lynch + ask-info utterance).
+* Trust score = revised_confidence calibrated via Platt (fit later). Unverified players get the base-rate prior `others_alive / alive` instead of a flat 0.5.
 * Jev-gate (System-One, live): same state sent to Jev `OpenRouterJevModel` (`typesafe/jev-1.14`) through OpenRouter in one round trip — `choice` = vote target + probs, `score` = threat 1-5, `noul` = should-delay 0-1. If `noul > JEV_THRESHOLD (0.6)` -> DELAY. Config is OpenRouter-only: `OpenRouterJevAPIKey` + `OpenRouterJevModel` (no BeatAI/systemone fallback, no key borrowing); a missing key logs a stub per call instead of delaying. Hybrid = LLM (System-2 DMN/TPN reasoning) + Jev (System-1 fast brake). Toggle via `--gate llm|jev`.
 
 ### 5. Logging schema (parquet, data-engineer friendly)
@@ -79,6 +79,8 @@ Raw responses go to `logs/runs/<run_tag>/raw/llm_raw.jsonl` (text + JSON, includ
 * cascade_resistance: when majority vote is wrong, % our agent's real lynch votes that did NOT follow it (abstentions excluded; they belong to delay_quality).
 * delay_quality: % focal delays that avoided a wrong plurality lynch, excluding `delay_cause=json_failure` (fallbacks are not EVT decisions) and days with no plurality target.
 * say_do_gap: % real lynch votes that violate a stated evidence commitment (reason has no valid history turn id; citations are checked against the game's actual turns, so hallucinated ids count as a gap). Abstentions are consistent with the commitment and excluded. Lower is better.
+
+Ablations (`--ablate`, comma-separated): `exformation` (DMN without the exformation field), `tpn` (skip verification, use DMN confidences), `evt` (never delay). Ablation labels are stored in `games.ablate` and the trace.
 
 ### 7. Comparative models + Jev plan (after MVP)
 | Phase | Model | Purpose |
