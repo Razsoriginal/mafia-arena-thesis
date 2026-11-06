@@ -121,7 +121,8 @@ class DmnTpnAgent(BaseAgent):
                                 "delay_cause": trace.get("delay_cause")}
         meta = {}
         d = llm.chat_json(P.VOTE_CITED_SYSTEM,
-                          P.vote_cited_user(self.pid, role, history, trust), meta=meta)
+                          P.vote_cited_user(self.pid, role, history, trust), meta=meta,
+                          temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), {
             "reason": d.get("reason", ""), "trace": trace, "jev": jev_out,
             "commitment": trace.get("commitment", COMMITMENT),

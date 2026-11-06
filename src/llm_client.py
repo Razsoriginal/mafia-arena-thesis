@@ -164,7 +164,8 @@ def _parse_json(raw: str):
         return None
 
 
-def chat_json(system: str, user: str, meta: dict | None = None) -> dict:
+def chat_json(system: str, user: str, meta: dict | None = None,
+              temperature: float | None = None) -> dict:
     """JSON mode with one repair pass. Falls back to {} (safe DELAY).
 
     meta receives parse_fail / repaired / empty_raw / error so callers can
@@ -177,8 +178,8 @@ def chat_json(system: str, user: str, meta: dict | None = None) -> dict:
 
     json_format = {"type": "json_object"}
     raw = chat_text(system + "\nReply with valid JSON only.", user,
-                    temperature=settings.temp_json, log=False,
-                    response_format=json_format)
+                    temperature=settings.temp_json if temperature is None else temperature,
+                    log=False, response_format=json_format)
     _log_raw("chat_json", raw)
     if meta is not None:
         meta["raw_len"] = len(raw)

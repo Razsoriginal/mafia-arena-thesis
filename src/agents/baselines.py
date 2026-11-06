@@ -1,5 +1,6 @@
 """Baselines — all use the same AiCredits backbone for a fair comparison."""
 from src import llm_client as llm
+from src.config import settings
 from src.mafia import prompts as P
 from .base import BaseAgent
 
@@ -20,7 +21,7 @@ class CotAgent(BaseAgent):
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history))
     def vote(self, role, history, trust):
         meta = {}
-        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta)
+        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
 
 class ReactAgent(BaseAgent):
@@ -31,7 +32,7 @@ class ReactAgent(BaseAgent):
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history, plan=thought))
     def vote(self, role, history, trust):
         meta = {}
-        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta)
+        d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
 
 class ConstitutionAgent(BaseAgent):
@@ -43,5 +44,5 @@ class ConstitutionAgent(BaseAgent):
     def vote(self, role, history, trust):
         meta = {}
         d = llm.chat_json(P.VOTE_SYSTEM + " Constitution: " + self.CONSTITUTION,
-            P.vote_user(self.pid, role, history, trust), meta=meta)
+            P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)

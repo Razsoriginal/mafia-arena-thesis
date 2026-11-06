@@ -79,6 +79,7 @@ class Settings:
     jev_threshold: float = field(default=_JEV_THRESHOLD)
     temp_dialogue: float = float(os.getenv("LLM_TEMPERATURE_DIALOGUE", "0.3"))
     temp_json: float = float(os.getenv("LLM_TEMPERATURE_JSON", "0.0"))
+    vote_temperature: float = float(os.getenv("LLM_TEMPERATURE_VOTE", "0.7"))
     max_tokens: int = int(os.getenv("LLM_MAX_TOKENS", "1500"))
     tau_delay: float = float(os.getenv("TAU_DELAY", "0.65"))
     evt_threshold: float = float(os.getenv("EVT_THRESHOLD", "0.6"))
