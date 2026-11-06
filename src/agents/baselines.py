@@ -19,7 +19,7 @@ class CotAgent(BaseAgent):
     name = "cot"
     def speak(self, role, history):
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history))
-    def vote(self, role, history, trust):
+    def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         meta = {}
         d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
@@ -28,7 +28,7 @@ class CotX3Agent(BaseAgent):
     name = "cotx3"
     def speak(self, role, history):
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history))
-    def vote(self, role, history, trust):
+    def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         samples, fails, reasons = [], [], []
         for _ in range(3):
             meta = {}
@@ -59,7 +59,7 @@ class ReactAgent(BaseAgent):
         thought = llm.chat_text("Think step by step: Thought, Action, Observation. Reply briefly.",
             f"Role {role}. History:\n{history}\nThought?")
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history, plan=thought))
-    def vote(self, role, history, trust):
+    def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         meta = {}
         d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
@@ -70,7 +70,7 @@ class ConstitutionAgent(BaseAgent):
     def speak(self, role, history):
         return llm.chat_text(P.DIALOGUE_SYSTEM + " Constitution: " + self.CONSTITUTION,
             P.dialogue_user(self.pid, role, history))
-    def vote(self, role, history, trust):
+    def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         meta = {}
         d = llm.chat_json(P.VOTE_SYSTEM + " Constitution: " + self.CONSTITUTION,
             P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)

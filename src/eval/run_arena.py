@@ -28,13 +28,24 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from src.agents.baselines import CotAgent, ReactAgent, ConstitutionAgent
+from src.agents.baselines import CotAgent, CotX3Agent, ReactAgent, ConstitutionAgent
 from src.agents.dmn_tpn_agent import DmnTpnAgent
+from src.agents.null_agents import MajorityFollowerAgent, RandomVoterAgent
 from src.config import settings
 from src.llm_client import COST_LOG, BillingExhausted
 from src.mafia.engine import Game
 
-AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent, "dmn_tpn": DmnTpnAgent}
+AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent,
+          "dmn_tpn": DmnTpnAgent, "cotx3": CotX3Agent,
+          "random_voter": RandomVoterAgent, "majority_follower": MajorityFollowerAgent}
+
+TEAM_ARMS = {
+    "dmn_village": {"village": "dmn_tpn", "mafia": "cot"},
+    "cot_village": {"village": "cot", "mafia": "cot"},
+    "cotx3_village": {"village": "cotx3", "mafia": "cot"},
+    "random_village": {"village": "random_voter", "mafia": "cot"},
+    "majority_village": {"village": "majority_follower", "mafia": "cot"},
+}
 
 # AiCredits catalog rates (USD/token) + INR/USD for meta/muse-spark-1.3-contributor.
 # Billing adds a 10% markup on the listed token rates (verified against usage.cost).
@@ -208,24 +219,40 @@ def _night_actions(game, agents, seed, day, night_mode, det_info):
     return kill, save, check
 
 
-def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random",
-             night_mode="llm", run_tag="", run_dir="logs/runs/tmp", requested_seed=None,
-             max_days=5, ablate=None):
-    game, _, focal_pid = _make_game(seed, focal_role)
-    run_id = run_id or f"{game.seed}-{focal}"
-    requested_seed = seed if requested_seed is None else requested_seed
-    game._run_id = run_id
-    game._focal_pid = focal_pid
-    raw_dir = os.path.join(run_dir, "raw")
-    os.makedirs(raw_dir, exist_ok=True)
-    # assign: focal agent class controls focal_pid, baselines elsewhere
+def _build_agents(game, focal_pid, focal="dmn_tpn", gate="llm", ablate=None,
+                  design="focal", arm=None):
     agents = {}
     for p in game.players:
-        cls = AGENTS[focal] if p.pid == focal_pid else AGENTS["cot"]
+        if design == "team":
+            if arm not in TEAM_ARMS:
+                raise ValueError(f"unknown team arm: {arm}")
+            key = TEAM_ARMS[arm]["mafia" if p.role == "mafia" else "village"]
+            cls = AGENTS[key]
+        else:
+            cls = AGENTS[focal] if p.pid == focal_pid else AGENTS["cot"]
         ag = cls(pid=p.pid, ablate=ablate) if cls is DmnTpnAgent else cls(pid=p.pid)
         if isinstance(ag, DmnTpnAgent):
             ag.backend = gate
         agents[p.pid] = ag
+    return agents
+
+
+def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random",
+             night_mode="llm", run_tag="", run_dir="logs/runs/tmp", requested_seed=None,
+             max_days=5, ablate=None, design="focal", arm=None):
+    if design == "team":
+        focal_role = "random"
+    game, _, focal_pid = _make_game(seed, focal_role)
+    run_id = run_id or f"{game.seed}-{arm or focal}"
+    requested_seed = seed if requested_seed is None else requested_seed
+    game._run_id = run_id
+    game._focal_pid = focal_pid
+    game._design = design
+    game._arm = arm
+    raw_dir = os.path.join(run_dir, "raw")
+    os.makedirs(raw_dir, exist_ok=True)
+    agents = _build_agents(game, focal_pid, focal=focal, gate=gate,
+                           ablate=ablate, design=design, arm=arm)
     game._focal_last = {}
     det_info = {}  # detective pid -> (checked_pid, role): private, never shared
     prev_majority = None
@@ -277,7 +304,8 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             if isinstance(ag, DmnTpnAgent):
                 v, info = ag.vote(p.role, view, trust_all[p.pid], traces[p.pid])
             else:
-                v, info = ag.vote(p.role, view, {})
+                v, info = ag.vote(p.role, view, {}, prev_majority=prev_majority,
+                                  seed=game.seed, day=day, alive=game.alive_ids())
             votes[p.pid] = v
             infos[p.pid] = info if isinstance(info, dict) else {}
             game.add(p.pid, f"votes {v} ({infos[p.pid].get('reason','')[:120]})", f"vote-{day}")
@@ -374,6 +402,7 @@ def _run_task(task: dict) -> dict:
         night_mode=task["night_mode"], run_tag=task["run_tag"],
         run_dir=task["run_dir"], requested_seed=task["requested_seed"],
         max_days=task["max_days"], ablate=task.get("ablate"),
+        design=task.get("design", "focal"), arm=task.get("arm"),
     )
     dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
     dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
@@ -436,10 +465,59 @@ def _record_result(result: dict, args, run_dir: str, rows: list):
           f"role={row['focal_role']} json_failures={row['json_failures']}")
 
 
+def build_tasks(args, run_tag, run_dir, git_sha, ablations=None):
+    ablations = ablations or []
+    design = getattr(args, "design", "focal")
+    if design == "team":
+        arms = [a.strip() for a in args.arms.split(",") if a.strip()]
+        for a in arms:
+            if a not in TEAM_ARMS:
+                raise ValueError(f"unknown team arm: {a}")
+        tasks = []
+        for i in range(args.games):
+            requested_seed = args.seed + i * 100
+            for arm in arms:
+                tasks.append({
+                    "requested_seed": requested_seed, "focal": arm, "arm": arm,
+                    "design": "team", "run_id": f"{requested_seed}-{arm}",
+                    "gate": args.gate, "focal_role": "random",
+                    "night_mode": args.night, "run_tag": run_tag,
+                    "run_dir": run_dir, "max_days": args.max_days,
+                    "tau": getattr(args, "tau", None), "ablate": ablations,
+                    "git_sha": git_sha,
+                })
+        return tasks
+    focals = [f.strip() for f in args.agents.split(",") if f.strip()]
+    taus = [settings.tau_delay]
+    if getattr(args, "tau_sweep", None):
+        taus = [float(x) for x in args.tau_sweep.split(",") if x.strip()]
+    tau_val = getattr(args, "tau", None)
+    tasks = []
+    for tau in taus:
+        for i in range(args.games):
+            for focal in focals:
+                requested_seed = args.seed + i * 100
+                run_id = f"{requested_seed}-{focal}"
+                if getattr(args, "tau_sweep", None):
+                    run_id += f"-tau{tau:g}"
+                tasks.append({
+                    "requested_seed": requested_seed, "focal": focal, "arm": None,
+                    "design": "focal", "run_id": run_id, "gate": args.gate,
+                    "focal_role": args.focal_role, "night_mode": args.night,
+                    "run_tag": run_tag, "run_dir": run_dir,
+                    "max_days": args.max_days,
+                    "tau": tau_val if tau_val is not None else tau,
+                    "ablate": ablations, "git_sha": git_sha,
+                })
+    return tasks
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--games", type=int, default=5)
     ap.add_argument("--agents", type=str, default="dmn_tpn,cot")
+    ap.add_argument("--design", type=str, default="focal", choices=["focal", "team"])
+    ap.add_argument("--arms", type=str, default="dmn_village,cot_village,cotx3_village")
     ap.add_argument("--seed", type=int, default=0)
     ap.add_argument("--gate", type=str, default="llm", choices=["llm", "jev"])
     ap.add_argument("--night", type=str, default="llm", choices=["llm", "scripted"])
@@ -475,32 +553,7 @@ def main():
     git_sha = _git_sha()
     _write_manifest(os.path.join(run_dir, "manifest.json"), args, run_tag, git_sha)
 
-    focals = [f.strip() for f in args.agents.split(",") if f.strip()]
-    taus = [settings.tau_delay]
-    if args.tau_sweep:
-        taus = [float(x) for x in args.tau_sweep.split(",") if x.strip()]
-    tasks = []
-    for tau in taus:
-        for i in range(args.games):
-            for focal in focals:
-                requested_seed = args.seed + i * 100
-                run_id = f"{requested_seed}-{focal}"
-                if args.tau_sweep:
-                    run_id += f"-tau{tau:g}"
-                tasks.append({
-                    "requested_seed": requested_seed,
-                    "focal": focal,
-                    "run_id": run_id,
-                    "gate": args.gate,
-                    "focal_role": args.focal_role,
-                    "night_mode": args.night,
-                    "run_tag": run_tag,
-                    "run_dir": run_dir,
-                    "max_days": args.max_days,
-                    "tau": tau,
-                    "ablate": ablations,
-                    "git_sha": git_sha,
-                })
+    tasks = build_tasks(args, run_tag, run_dir, git_sha, ablations=ablations)
 
     rows = []
     if args.workers > 1 and len(tasks) > 1:
