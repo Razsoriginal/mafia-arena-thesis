@@ -8,7 +8,8 @@ class BaseAgent:
         self.pid = pid
     def speak(self, role, history) -> str:
         return "I am watching and waiting for evidence."
-    def vote(self, role, history, trust) -> tuple[str, dict]:
+    def vote(self, role, history, trust, prev_majority=None, seed=None,
+             day=None, alive=None) -> tuple[str, dict]:
         return "no-lynch", {}
     def night_action(self, role, history, alive, options, action):
         """LLM night choice: 'kill' | 'save' | 'check'. None = engine fallback."""
