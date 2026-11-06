@@ -11,6 +11,22 @@ class BaseAgent:
     def vote(self, role, history, trust, prev_majority=None, seed=None,
              day=None, alive=None) -> tuple[str, dict]:
         return "no-lynch", {}
+    def elicit_trust_probe(self, role, history, alive):
+        """Post-vote shadow probe at 0.0. Never fed back into play."""
+        meta = {}
+        d = llm.chat_json(P.TRUST_PROBE_SYSTEM,
+                          P.trust_probe_user(self.pid, history, alive),
+                          meta=meta, temperature=0.0)
+        raw = d.get("trust", {}) if isinstance(d, dict) else {}
+        trust = {}
+        for k, v in (raw or {}).items():
+            if str(k) == str(self.pid):
+                continue
+            try:
+                trust[str(k)] = round(float(v), 3)
+            except Exception:
+                continue
+        return trust, {"probe": True, "parse_fail": bool(meta.get("parse_fail"))}
     def night_action(self, role, history, alive, options, action):
         """LLM night choice: 'kill' | 'save' | 'check'. None = engine fallback."""
         meta = {}

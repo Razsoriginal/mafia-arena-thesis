@@ -64,6 +64,13 @@ def trust_user(player_id, history, alive):
 Give trust 0-1 per alive other player (1=trust innocent, 0=mafia) + your commitment.
 JSON: {{"trust": {{"1": 0.8}}, "commitment": "I will only vote with proof"}}"""
 
+TRUST_PROBE_SYSTEM = "Output trust scores. Reply JSON only."
+def trust_probe_user(player_id, history, alive):
+    others = [a for a in alive if int(a) != int(player_id)]
+    return f"""You are Player {player_id}. Alive others: {others}. History: {history}
+Give trust 0-1 per alive other player (1=trust innocent, 0=mafia).
+JSON: {{"trust": {{"1": 0.8}}}}"""
+
 NIGHT_SYSTEM = "You choose a night action in Mafia. Reply JSON only."
 
 _NIGHT_INSTRUCTIONS = {
