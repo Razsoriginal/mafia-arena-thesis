@@ -24,6 +24,35 @@ class CotAgent(BaseAgent):
         d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature)
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
 
+class CotX3Agent(BaseAgent):
+    name = "cotx3"
+    def speak(self, role, history):
+        return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history))
+    def vote(self, role, history, trust):
+        samples, fails, reasons = [], [], []
+        for _ in range(3):
+            meta = {}
+            d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust),
+                              meta=meta, temperature=settings.vote_temperature)
+            fails.append(bool(meta.get("parse_fail")))
+            samples.append(str(d["vote"]) if d.get("vote") is not None else None)
+            reasons.append(str(d.get("reason", "")))
+        counted = [s for s in samples if s is not None]
+        tie = False
+        if not counted:
+            chosen = "no-lynch"
+        else:
+            from collections import Counter
+            top, cnt = Counter(counted).most_common(1)[0]
+            tie = cnt == 1 and len(counted) > 1
+            chosen = counted[0] if tie else top
+        info = _vote_info({"reason": reasons[0] if reasons else ""},
+                          {"parse_fail": all(fails)})
+        info.update({"samples": samples, "sample_parse_fails": fails,
+                     "tie_all_different": bool(tie),
+                     "vote_temperature": settings.vote_temperature})
+        return chosen, info
+
 class ReactAgent(BaseAgent):
     name = "react"
     def speak(self, role, history):
