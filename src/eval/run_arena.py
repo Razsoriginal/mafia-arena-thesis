@@ -461,7 +461,40 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
     return game
 
 
+def _group_trios(tasks):
+    groups, seen = [], {}
+    for t in tasks:
+        key = t["requested_seed"]
+        if key not in seen:
+            seen[key] = []
+            groups.append(seen[key])
+        seen[key].append(t)
+    return groups
+
+
+def _cumulative_cost(rows) -> float:
+    return float(sum(float(r.get("billed_cost_inr") or 0) for r in rows))
+
+
+def _budget_exceeded(rows, cap) -> bool:
+    return cap is not None and _cumulative_cost(rows) > float(cap)
+
+
+def _run_one_with_retry(task, runner=None):
+    runner = runner or _run_task_once
+    try:
+        return runner(task)
+    except BillingExhausted:
+        raise
+    except Exception:
+        return runner(task)
+
+
 def _run_task(task: dict) -> dict:
+    return _run_one_with_retry(task, runner=_run_task_once)
+
+
+def _run_task_once(task: dict) -> dict:
     """Run one game in a worker process.
 
     Workers write only their own raw files (per-task LLM log dir + unique
@@ -615,6 +648,8 @@ def main():
                     help="comma-separated TAU_DELAY values; repeats the dmn_tpn cells per tau")
     ap.add_argument("--ablate", type=str, default="",
                     help="comma-separated dmn_tpn ablations: exformation,tpn,evt")
+    ap.add_argument("--budget-cap", type=float, default=1600.0,
+                    help="cumulative billed Rs. cap; abort after current trio")
     ap.add_argument("--no-canonical", action="store_true",
                     help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
@@ -637,7 +672,53 @@ def main():
     tasks = build_tasks(args, run_tag, run_dir, git_sha, ablations=ablations)
 
     rows = []
-    if args.workers > 1 and len(tasks) > 1:
+    if getattr(args, "design", "focal") == "team":
+        aborted = False
+        for trio in _group_trios(tasks):
+            if aborted:
+                break
+            if args.workers > 1 and len(trio) > 1:
+                ex = ProcessPoolExecutor(max_workers=min(args.workers, len(trio)))
+                futures = {ex.submit(_run_task, t): t for t in trio}
+                try:
+                    for fut in as_completed(futures):
+                        try:
+                            result = fut.result()
+                        except BillingExhausted as e:
+                            t = futures[fut]
+                            print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
+                            print(f"[{run_tag}] trio pending; top up and rerun same seeds.")
+                            aborted = True
+                            break
+                        except Exception as e:
+                            t = futures[fut]
+                            print(f"[{run_tag}] worker failed for {t['run_id']}: "
+                                  f"{type(e).__name__}: {e}")
+                            continue
+                        _record_result(result, args, run_dir, rows)
+                finally:
+                    for f in futures:
+                        f.cancel()
+                    ex.shutdown(wait=True, cancel_futures=True)
+            else:
+                for t in trio:
+                    try:
+                        result = _run_task(t)
+                    except BillingExhausted as e:
+                        print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
+                        print(f"[{run_tag}] trio pending; top up and rerun same seeds.")
+                        aborted = True
+                        break
+                    except Exception as e:
+                        print(f"[{run_tag}] worker failed for {t['run_id']}: "
+                              f"{type(e).__name__}: {e}")
+                        continue
+                    _record_result(result, args, run_dir, rows)
+            if not aborted and _budget_exceeded(rows, getattr(args, "budget_cap", 1600.0)):
+                print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
+                      f"(spent Rs.{_cumulative_cost(rows):.2f}); aborting remaining trios.")
+                break
+    elif args.workers > 1 and len(tasks) > 1:
         ex = ProcessPoolExecutor(max_workers=min(args.workers, len(tasks)))
         futures = {ex.submit(_run_task, t): t for t in tasks}
         try:
