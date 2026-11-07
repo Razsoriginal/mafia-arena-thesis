@@ -219,6 +219,36 @@ def _night_actions(game, agents, seed, day, night_mode, det_info):
     return kill, save, check
 
 
+def _plurality_info(votes):
+    """Return (plurality_target, tied) excluding no-lynch votes."""
+    from collections import Counter
+    c = Counter([str(v) for v in votes.values() if str(v) != "no-lynch"])
+    if not c:
+        return "no-lynch", False
+    ranked = c.most_common()
+    tied = len(ranked) > 1 and ranked[0][1] == ranked[1][1]
+    return str(ranked[0][0]), bool(tied)
+
+
+def _verified_suspects(trace):
+    trace = trace if isinstance(trace, dict) else {}
+    out = set()
+    tpn = trace.get("tpn") or {}
+    for v in tpn.get("verified", []) or []:
+        try:
+            out.add(str(v["suspect"]))
+        except Exception:
+            continue
+    if not out:
+        dmn = trace.get("dmn") or {}
+        for h in dmn.get("hypotheses", []) or []:
+            try:
+                out.add(str(h["suspect"]))
+            except Exception:
+                continue
+    return out
+
+
 def _build_agents(game, focal_pid, focal="dmn_tpn", gate="llm", ablate=None,
                   design="focal", arm=None):
     agents = {}
@@ -309,10 +339,20 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             votes[p.pid] = v
             infos[p.pid] = info if isinstance(info, dict) else {}
             game.add(p.pid, f"votes {v} ({infos[p.pid].get('reason','')[:120]})", f"vote-{day}")
+        # shadow probe (team only): post-vote, pre-vote snapshot, no feedback
+        probe_trust = {}
+        if design == "team":
+            for p in list(game.alive()):
+                if game.players[p.pid].role == "mafia":
+                    continue
+                ag = agents[p.pid]
+                if isinstance(ag, (RandomVoterAgent, MajorityFollowerAgent)):
+                    continue
+                view = full + _private_note(game, p.pid, det_info)
+                ptrust, pinfo = ag.elicit_trust_probe(p.role, view, alive)
+                probe_trust[p.pid] = (ptrust, pinfo)
         # record majority for metrics
-        from collections import Counter
-        c = Counter([v for v in votes.values() if v != "no-lynch"])
-        maj = c.most_common(1)[0][0] if c else "no-lynch"
+        maj, plurality_tied = _plurality_info(votes)
         maj_correct = True
         if maj != "no-lynch":
             try:
@@ -332,6 +372,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             reason = str(info.get("reason", ""))
             valid_turns = {h["turn"] for h in game.history}
             cited_turns = sorted({int(m) for m in _TURN_ID.findall(reason)} & valid_turns)
+            voter_role = game.players[voter].role
             vote_rows.append({
                 "run_tag": run_tag, "game_id": run_id, "day": day, "voter": voter,
                 "vote": str(v), "majority_vote": str(maj),
@@ -346,24 +387,59 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 "jev_stub": (jev.get("stub") if isinstance(jev, dict) else None),
                 "provider": settings.provider, "model": settings.model,
                 "night_mode": night_mode,
+                "design": design, "arm": arm or focal,
+                "voter_role": voter_role, "is_village": voter_role != "mafia",
+                "plurality_tied": bool(plurality_tied),
+                "samples": info.get("samples"), "sample_parse_fails": info.get("sample_parse_fails"),
             })
-        for target, tval in (trust_all.get(focal_pid, {}) or {}).items():
-            try:
-                is_mafia = game.players[int(target)].role == "mafia"
-                trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
-                                   "agent": focal_pid, "focal_pid": focal_pid,
-                                   "target": str(target),
-                                   "trust": float(tval), "target_is_mafia": bool(is_mafia),
-                                   "provider": settings.provider, "model": settings.model})
-            except Exception:
-                continue
+        _arm_label = arm or focal
+        if design == "team":
+            decision_pids = [pid for pid, ag in agents.items()
+                             if isinstance(ag, DmnTpnAgent)
+                             and game.players[pid].role != "mafia" and pid in trust_all]
+        else:
+            decision_pids = [focal_pid] if trust_all.get(focal_pid) else []
+        for _pid in decision_pids:
+            _verified = _verified_suspects(traces.get(_pid, {}))
+            for target, tval in (trust_all.get(_pid, {}) or {}).items():
+                try:
+                    is_mafia = game.players[int(target)].role == "mafia"
+                    trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                                       "agent": _pid, "focal_pid": focal_pid,
+                                       "target": str(target),
+                                       "trust": float(tval), "target_is_mafia": bool(is_mafia),
+                                       "provider": settings.provider, "model": settings.model,
+                                       "design": design, "arm": _arm_label,
+                                       "voter_role": game.players[_pid].role,
+                                       "probe": False, "trust_source": "decision",
+                                       "verified": str(target) in _verified})
+                except Exception:
+                    continue
+        for _pid, (_ptrust, _pinfo) in probe_trust.items():
+            for target, tval in (_ptrust or {}).items():
+                try:
+                    is_mafia = game.players[int(target)].role == "mafia"
+                    trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                                       "agent": _pid, "focal_pid": focal_pid,
+                                       "target": str(target),
+                                       "trust": float(tval), "target_is_mafia": bool(is_mafia),
+                                       "provider": settings.provider, "model": settings.model,
+                                       "design": design, "arm": _arm_label,
+                                       "voter_role": game.players[_pid].role,
+                                       "probe": True, "trust_source": "probe",
+                                       "verified": True})
+                except Exception:
+                    continue
         # full per-day trace for audit
         try:
             with open(os.path.join(raw_dir, f"trace_{run_id}-day{day}.json"), "w", encoding="utf-8") as f:
                 json.dump({"run_tag": run_tag, "run_id": run_id, "model": settings.model,
-                           "focal_pid": focal_pid,
+                           "focal_pid": focal_pid, "design": design, "arm": arm,
                            "trust": trust_all.get(focal_pid, {}),
-                           "trace": traces.get(focal_pid, {})}, f, default=str)
+                           "trace": traces.get(focal_pid, {}),
+                           "trust_all": trust_all, "traces_all": traces,
+                           "probe_trust": {str(k): v[0] for k, v in probe_trust.items()}},
+                          f, default=str)
         except Exception:
             pass
         game._last_votes = {"votes": votes, "majority": str(maj), "majority_correct": maj_correct,
@@ -434,6 +510,10 @@ def _run_task(task: dict) -> dict:
         "billed_cost_inr": round(dc_inr, 4),
         "json_failures": dj,
         "jev_stub": jev_info.get("stub") if isinstance(jev_info, dict) else None,
+        "design": task.get("design", "focal"),
+        "arm": task.get("arm") or task["focal"],
+        "village_arm": (TEAM_ARMS[task["arm"]]["village"] if task.get("arm") in TEAM_ARMS else task["focal"]),
+        "mafia_arm": (TEAM_ARMS[task["arm"]]["mafia"] if task.get("arm") in TEAM_ARMS else "cot"),
     }
     return {"row": row,
             "votes": getattr(g, "_vote_rows", []) or [],
@@ -456,11 +536,12 @@ def _record_result(result: dict, args, run_dir: str, rows: list):
                     ["run_tag", "game_id", "day", "voter"])
     if result["trust"]:
         tdf = pd.DataFrame(result["trust"])
-        _upsert(os.path.join(run_dir, "trust.parquet"), tdf,
-                ["run_tag", "game_id", "day", "agent", "target"])
+        _tkeys = ["run_tag", "game_id", "day", "agent", "target"]
+        if "trust_source" in tdf.columns:
+            _tkeys = _tkeys + ["trust_source"]
+        _upsert(os.path.join(run_dir, "trust.parquet"), tdf, _tkeys)
         if not args.no_canonical:
-            _upsert("logs/trust.parquet", tdf,
-                    ["run_tag", "game_id", "day", "agent", "target"])
+            _upsert("logs/trust.parquet", tdf, _tkeys)
     print(f"[{row['run_tag']}] {row['game_id']}: {row['winner']} in {row['days']} days "
           f"role={row['focal_role']} json_failures={row['json_failures']}")
 
