@@ -72,6 +72,40 @@ def delay_quality(votes_df: pd.DataFrame, reasoned_only: bool = True):
     return float(np.mean(outcomes)) if outcomes else float("nan")
 
 
+def team_cascade_resistance(votes_df: pd.DataFrame):
+    """Village voters on wrong plurality days, abstentions excluded."""
+    if votes_df.empty or "is_village" not in votes_df.columns:
+        return float("nan")
+    wrong = votes_df[~votes_df["majority_correct"].astype(bool)]
+    village = wrong[wrong["is_village"].astype(bool)]
+    village = village[village["vote"].astype(str) != "no-lynch"]
+    if village.empty:
+        return float("nan")
+    resisted = village["vote"].astype(str) != village["majority_vote"].astype(str)
+    return float(resisted.mean())
+
+
+def team_delay_quality(votes_df: pd.DataFrame, reasoned_only: bool = True):
+    """Once per game-day: village delay avoided a wrong plurality lynch."""
+    if votes_df.empty or "is_village" not in votes_df.columns:
+        return float("nan")
+    df = votes_df
+    if reasoned_only and "delay_cause" in df.columns:
+        cause = df["delay_cause"].fillna("").astype(str)
+        df = df[cause != "json_failure"]
+    keys = ["run_tag", "game_id", "day"] if "run_tag" in df.columns else ["game_id", "day"]
+    outcomes = []
+    for _, grp in df.groupby(keys):
+        village = grp[grp["is_village"].astype(bool)]
+        if village.empty or not (village["vote"].astype(str) == "no-lynch").any():
+            continue
+        majority = str(grp["majority_vote"].iloc[0])
+        if majority == "no-lynch":
+            continue
+        outcomes.append(0 if bool(grp["majority_correct"].iloc[0]) else 1)
+    return float(np.mean(outcomes)) if outcomes else float("nan")
+
+
 def say_do_gap(votes_df: pd.DataFrame):
     """% votes that violate a stated evidence commitment.
 
