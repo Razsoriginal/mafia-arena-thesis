@@ -85,12 +85,88 @@ def _upsert(path: str, new_df: pd.DataFrame, keys: list):
     df.to_parquet(path, index=False)
 
 
+PREREG_MODEL = "meta/muse-spark-1.3-contributor"
+PREREG_TAU = 0.35
+PREREG_MAX_TOKENS = 2500
+PREREG_TEMP_DIALOGUE = 0.3
+PREREG_TEMP_JSON = 0.0
+PREREG_VOTE_TEMPERATURE = 0.7
+
+
+def _prompt_hash() -> str:
+    import hashlib
+    p = os.path.join(os.path.dirname(__file__), "..", "mafia", "prompts.py")
+    with open(os.path.normpath(p), "rb") as f:
+        return hashlib.sha256(f.read()).hexdigest()
+
+
+def _prereg_expected():
+    path = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "PREREGISTRATION.md")
+    path = os.path.normpath(path)
+    out = {}
+    if not os.path.exists(path):
+        return out
+    try:
+        text = open(path, encoding="utf-8").read()
+    except Exception:
+        return out
+    import re as _re
+    m = _re.search(r"prompts_sha256:\s*([0-9a-f]{64})", text)
+    if m:
+        out["prompt_hash"] = m.group(1)
+    m = _re.search(r"freeze_git_sha:\s*([0-9a-f]{7,40})", text)
+    if m:
+        out["git_sha"] = m.group(1)
+    return out
+
+
+def _assert_confirmatory(args):
+    if not getattr(args, "confirmatory", False):
+        return
+    errors = []
+    if getattr(args, "design", None) != "team":
+        errors.append("confirmatory requires --design team")
+    if getattr(args, "gate", None) != "llm":
+        errors.append("confirmatory requires --gate llm")
+    if getattr(args, "ablate", ""):
+        errors.append("confirmatory requires empty --ablate")
+    if getattr(args, "tau", None) is None or float(args.tau) != PREREG_TAU:
+        errors.append(f"confirmatory requires --tau {PREREG_TAU} passed explicitly")
+    if settings.model != PREREG_MODEL:
+        errors.append(f"model {settings.model} != pre-registered {PREREG_MODEL}")
+    if settings.max_tokens != PREREG_MAX_TOKENS:
+        errors.append(f"max_tokens {settings.max_tokens} != {PREREG_MAX_TOKENS}")
+    if settings.temp_dialogue != PREREG_TEMP_DIALOGUE:
+        errors.append(f"temp_dialogue {settings.temp_dialogue} != {PREREG_TEMP_DIALOGUE}")
+    if settings.temp_json != PREREG_TEMP_JSON:
+        errors.append(f"temp_json {settings.temp_json} != {PREREG_TEMP_JSON}")
+    if settings.vote_temperature != PREREG_VOTE_TEMPERATURE:
+        errors.append(f"vote_temperature {settings.vote_temperature} != {PREREG_VOTE_TEMPERATURE}")
+    expected = _prereg_expected()
+    if "prompt_hash" in expected and _prompt_hash() != expected["prompt_hash"]:
+        errors.append("prompt hash differs from pre-registration")
+    if "git_sha" in expected and _git_sha() not in (expected["git_sha"],):
+        # allow full vs short prefix match
+        if not expected["git_sha"].startswith(_git_sha()) and not _git_sha().startswith(expected["git_sha"][:7]):
+            errors.append("git sha differs from pre-registration freeze")
+    if errors:
+        raise SystemExit("Confirmatory pre-registration check failed: " + "; ".join(errors))
+
+
 def _write_manifest(path: str, args, run_tag: str, git_sha: str):
     manifest = {
         "run_tag": run_tag,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": git_sha,
         "args": vars(args),
+        "design": getattr(args, "design", "focal"),
+        "arm_map": TEAM_ARMS if getattr(args, "design", "focal") == "team" else {},
+        "arms": getattr(args, "arms", None),
+        "probe_enabled": getattr(args, "design", "focal") == "team",
+        "prompt_hash": _prompt_hash(),
+        "budget_cap_inr": getattr(args, "budget_cap", 1600.0),
+        "calibration_trios": getattr(args, "calibration_trios", 20),
+        "confirmatory": bool(getattr(args, "confirmatory", False)),
         "llm": {
             "provider": settings.provider,
             "base_url": settings.base_url,
@@ -98,6 +174,7 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
             "max_tokens": settings.max_tokens,
             "temperature_dialogue": settings.temp_dialogue,
             "temperature_json": settings.temp_json,
+            "vote_temperature": settings.vote_temperature,
         },
         "jev": {
             "base_url": settings.jev_base_url,
@@ -650,6 +727,9 @@ def main():
                     help="comma-separated dmn_tpn ablations: exformation,tpn,evt")
     ap.add_argument("--budget-cap", type=float, default=1600.0,
                     help="cumulative billed Rs. cap; abort after current trio")
+    ap.add_argument("--calibration-trios", type=int, default=20)
+    ap.add_argument("--confirmatory", action="store_true",
+                    help="enforce pre-registration checks before starting")
     ap.add_argument("--no-canonical", action="store_true",
                     help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
@@ -660,6 +740,7 @@ def main():
     unknown = set(ablations) - {"exformation", "tpn", "evt"}
     if unknown:
         ap.error(f"unknown ablation(s): {', '.join(sorted(unknown))}")
+    _assert_confirmatory(args)
 
     run_tag = args.run_tag or time.strftime("%Y%m%d-%H%M%S")
     os.environ["MAFIA_RUN_TAG"] = run_tag
