@@ -60,7 +60,22 @@ def build_sample(votes_df, histories, n_delay=60, n_lynch=60, seed=20261106):
     rng = random.Random(seed)
     rng.shuffle(delay_days)
     rng.shuffle(lynch_days)
-    chosen = delay_days[:n_delay] + lynch_days[:n_lynch]
+    if n_delay >= 30 and "arm" in votes_df.columns:
+        by_arm = {}
+        arm_by_day = {}
+        for key, grp in votes_df.groupby(keys):
+            arm_by_day[(str(key[1] if len(key) > 1 else key[0]), int(key[-1]))] = str(grp["arm"].iloc[0])
+        for item in delay_days:
+            by_arm.setdefault(arm_by_day.get((item["game_id"], item["day"]), "?"), []).append(item)
+        arms = sorted(by_arm)
+        quota = max(1, n_delay // max(1, len(arms)))
+        chosen_delay = []
+        for a in arms:
+            chosen_delay.extend(by_arm[a][:quota])
+        chosen_delay = chosen_delay[:n_delay]
+    else:
+        chosen_delay = delay_days[:n_delay]
+    chosen = chosen_delay + lynch_days[:n_lynch]
     rng.shuffle(chosen)
     sample = []
     for i, item in enumerate(chosen):
