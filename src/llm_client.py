@@ -39,25 +39,40 @@ def _log_jsonl(name: str, payload: dict):
         pass
 
 
-def _log_raw(fn: str, raw: str):
+def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
+             attempt=None, repair: bool = False, escalated: bool = False,
+             realised_model=None):
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
         "fn": fn,
         "provider": settings.provider,
         "model": settings.model,
+        "requested_model": settings.model,
+        "realised_model": realised_model,
+        "resp_model": realised_model,
         "base_url": settings.base_url,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "attempt": attempt,
+        "repair": bool(repair),
+        "escalated": bool(escalated),
         "raw": (raw or "")[:4000],
     })
 
 
-def _log_error(fn: str, error, raw: str = ""):
+def _log_error(fn: str, error, raw: str = "", temperature=None,
+               max_tokens=None, attempt=None):
     _log_jsonl("llm_errors.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
         "fn": fn,
         "provider": settings.provider,
         "model": settings.model,
+        "requested_model": settings.model,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "attempt": attempt,
         "error": str(error)[:500],
         "raw": (raw or "")[:2000],
     })
@@ -91,8 +106,12 @@ def chat_text(system: str, user: str, temperature: float | None = None,
     temp = settings.temp_dialogue if temperature is None else temperature
     use_format = response_format
     max_tokens = settings.max_tokens
+    initial_max_tokens = max_tokens
     # 5 attempts: long games hit transient connection errors often enough
     # that 3 attempts silently turns a vote into a fallback delay.
+    # Retry/repair/escalation behaviour is pilot-consistent and is logged
+    # per call (see _log_raw); it is not part of the first-attempt
+    # temperature contract. See docs/PREREGISTRATION.md §8.
     for attempt in range(5):
         try:
             kwargs = {
@@ -115,18 +134,25 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                     COST_LOG["cost_inr"] += float(billed)
             except Exception:
                 pass
+            realised = getattr(resp, "model", None)
+            escalated = max_tokens != initial_max_tokens
             reasoning = _reasoning(resp)
             if reasoning:
                 # Audit only: reasoning is never used as the answer.
-                _log_raw("reasoning", reasoning)
+                _log_raw("reasoning", reasoning, temperature=temp,
+                         max_tokens=max_tokens, attempt=attempt,
+                         escalated=escalated, realised_model=realised)
             text = _content(resp)
             if not text:
                 raise ValueError(f"empty content (max_tokens={max_tokens})")
             if log:
-                _log_raw("chat_text", text)
+                _log_raw("chat_text", text, temperature=temp,
+                         max_tokens=max_tokens, attempt=attempt,
+                         escalated=escalated, realised_model=realised)
             return text
         except Exception as e:
-            _log_error("chat_text", e)
+            _log_error("chat_text", e, temperature=temp,
+                       max_tokens=max_tokens, attempt=attempt)
             text_err = str(e).lower()
             if "402" in text_err or "insufficient balance" in text_err:
                 # Never retry a payment failure: it silently turns every
@@ -137,7 +163,9 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                 continue
             if "empty content" in str(e) and max_tokens < 4000:
                 # Reasoning models can spend the whole budget before answering.
+                # Logged via escalated=True on the next attempt's raw record.
                 max_tokens = min(4000, max_tokens + 1000)
+                COST_LOG["escalations"] = COST_LOG.get("escalations", 0) + 1
                 continue
             if attempt == 4:
                 return ""
@@ -177,10 +205,12 @@ def chat_json(system: str, user: str, meta: dict | None = None,
                      "empty_raw": False, "error": None, "raw_len": 0})
 
     json_format = {"type": "json_object"}
+    first_temp = settings.temp_json if temperature is None else temperature
     raw = chat_text(system + "\nReply with valid JSON only.", user,
-                    temperature=settings.temp_json if temperature is None else temperature,
+                    temperature=first_temp,
                     log=False, response_format=json_format)
-    _log_raw("chat_json", raw)
+    _log_raw("chat_json", raw, temperature=first_temp,
+             max_tokens=settings.max_tokens, attempt=0)
     if meta is not None:
         meta["raw_len"] = len(raw)
     if not raw.strip():
@@ -198,9 +228,14 @@ def chat_json(system: str, user: str, meta: dict | None = None,
                   "No prose, no reasoning, no markdown.")
     fix_user = (f"{user}\n\nYour previous reply was not valid JSON:\n{raw[:1200]}\n\n"
                 "Return the correct JSON object now.")
+    # Repair pass stays at 0.0 (pilot-consistent). It is a repair of a
+    # failed first attempt, logged with repair=True, not a fresh
+    # vote-sample; see PREREGISTRATION.md §8 amendment.
+    COST_LOG["repairs"] = COST_LOG.get("repairs", 0) + 1
     fix = chat_text(fix_system, fix_user, temperature=0.0, log=False,
                     response_format=json_format)
-    _log_raw("chat_json_repair", fix)
+    _log_raw("chat_json_repair", fix, temperature=0.0,
+             max_tokens=settings.max_tokens, attempt=1, repair=True)
     parsed = _parse_json(fix)
     if parsed is not None:
         if meta is not None:
