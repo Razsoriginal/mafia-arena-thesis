@@ -309,6 +309,13 @@ def _plurality_info(votes):
 
 
 def _verified_suspects(trace):
+    """Targets TPN actually verified. DMN hypotheses alone are NOT verified.
+
+    The old fallback marked DMN-only suspects verified=True even though
+    their trust value is the base-rate prior, which let prior-filler rows
+    enter decision[verified-only] (F10). Unverified targets now stay
+    verified=False and are reported as prior-filler.
+    """
     trace = trace if isinstance(trace, dict) else {}
     out = set()
     tpn = trace.get("tpn") or {}
@@ -317,13 +324,6 @@ def _verified_suspects(trace):
             out.add(str(v["suspect"]))
         except Exception:
             continue
-    if not out:
-        dmn = trace.get("dmn") or {}
-        for h in dmn.get("hypotheses", []) or []:
-            try:
-                out.add(str(h["suspect"]))
-            except Exception:
-                continue
     return out
 
 
@@ -406,6 +406,9 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         # vote (Jev is consulted inside DmnTpnAgent.vote when gate=jev)
         votes, infos = {}, {}
         full = game.history_text()
+        # Citation validity is judged against turns that existed BEFORE
+        # any vote line or lynch result from this day was appended (F11).
+        valid_turns_at_vote = {h["turn"] for h in game.history}
         for p in list(game.alive()):
             ag = agents[p.pid]
             view = full + _private_note(game, p.pid, det_info)
@@ -448,8 +451,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             info = infos.get(voter, {})
             jev = info.get("jev") if isinstance(info, dict) else None
             reason = str(info.get("reason", ""))
-            valid_turns = {h["turn"] for h in game.history}
-            cited_turns = sorted({int(m) for m in _TURN_ID.findall(reason)} & valid_turns)
+            cited_turns = sorted({int(m) for m in _TURN_ID.findall(reason)} & valid_turns_at_vote)
             voter_role = game.players[voter].role
             vote_rows.append({
                 "run_tag": run_tag, "game_id": run_id, "day": day, "voter": voter,
@@ -469,6 +471,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 "voter_role": voter_role, "is_village": voter_role != "mafia",
                 "plurality_tied": bool(plurality_tied),
                 "samples": info.get("samples"), "sample_parse_fails": info.get("sample_parse_fails"),
+                "n_sample_parse_fails": info.get("n_sample_parse_fails"),
             })
         _arm_label = arm or focal
         if design == "team":
@@ -490,22 +493,46 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                                        "design": design, "arm": _arm_label,
                                        "voter_role": game.players[_pid].role,
                                        "probe": False, "trust_source": "decision",
-                                       "verified": str(target) in _verified})
+                                       "verified": str(target) in _verified,
+                                       "elicited": False,
+                                       "parse_fail": bool((traces.get(_pid, {}) or {}).get("parse_fail"))})
                 except Exception:
                     continue
         for _pid, (_ptrust, _pinfo) in probe_trust.items():
-            for target, tval in (_ptrust or {}).items():
+            # One row per expected target (alive non-self at that seat-day)
+            # so probe missingness is computable by arm (F33). Missing or
+            # unparseable targets get trust=NaN + parse_fail=True (F34:
+            # probe rows are elicited, never TPN-verified).
+            _pinfo = _pinfo if isinstance(_pinfo, dict) else {}
+            _pfail = bool(_pinfo.get("parse_fail"))
+            _expected = [str(a) for a in alive if str(a) != str(_pid)]
+            for target in _expected:
                 try:
                     is_mafia = game.players[int(target)].role == "mafia"
-                    trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
-                                       "agent": _pid, "focal_pid": focal_pid,
-                                       "target": str(target),
-                                       "trust": float(tval), "target_is_mafia": bool(is_mafia),
-                                       "provider": settings.provider, "model": settings.model,
-                                       "design": design, "arm": _arm_label,
-                                       "voter_role": game.players[_pid].role,
-                                       "probe": True, "trust_source": "probe",
-                                       "verified": True})
+                    if target in (_ptrust or {}):
+                        trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                                           "agent": _pid, "focal_pid": focal_pid,
+                                           "target": str(target),
+                                           "trust": float(_ptrust[target]),
+                                           "target_is_mafia": bool(is_mafia),
+                                           "provider": settings.provider, "model": settings.model,
+                                           "design": design, "arm": _arm_label,
+                                           "voter_role": game.players[_pid].role,
+                                           "probe": True, "trust_source": "probe",
+                                           "verified": False, "elicited": True,
+                                           "parse_fail": False})
+                    else:
+                        trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                                           "agent": _pid, "focal_pid": focal_pid,
+                                           "target": str(target),
+                                           "trust": float("nan"),
+                                           "target_is_mafia": bool(is_mafia),
+                                           "provider": settings.provider, "model": settings.model,
+                                           "design": design, "arm": _arm_label,
+                                           "voter_role": game.players[_pid].role,
+                                           "probe": True, "trust_source": "probe",
+                                           "verified": False, "elicited": True,
+                                           "parse_fail": True})
                 except Exception:
                     continue
         # full per-day trace for audit
@@ -516,7 +543,8 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                            "trust": trust_all.get(focal_pid, {}),
                            "trace": traces.get(focal_pid, {}),
                            "trust_all": trust_all, "traces_all": traces,
-                           "probe_trust": {str(k): v[0] for k, v in probe_trust.items()}},
+                           "probe_trust": {str(k): v[0] for k, v in probe_trust.items()},
+                           "probe_info": {str(k): v[1] for k, v in probe_trust.items()}},
                           f, default=str)
         except Exception:
             pass
@@ -609,7 +637,12 @@ def _run_task_once(task: dict) -> dict:
         "jev_model": settings.jev_model, "git_sha": task["git_sha"],
         "tau": settings.tau_delay, "evt_threshold": settings.evt_threshold,
         "ablate": ",".join(task.get("ablate") or []),
-        "winner": g.winner, "days": g.day,
+        # days = number of days played (day-count). Pilot parquet stored
+        # the zero-based last-day index (g.day); a first-day game recorded
+        # 0 there. New rows store the count (F12), so a game ending on
+        # day 0 records 1 and a 5-day cap records 5. The calibration
+        # length rule (mean days < 1.5) uses this count convention.
+        "winner": g.winner, "days": int(g.day) + 1,
         "focal_role": g.players[focal_pid].role,
         "majority_correct": lv.get("majority_correct"),
         "delay_cause": trace.get("delay_cause") if isinstance(trace, dict) else None,

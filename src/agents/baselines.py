@@ -49,6 +49,7 @@ class CotX3Agent(BaseAgent):
         info = _vote_info({"reason": reasons[0] if reasons else ""},
                           {"parse_fail": all(fails)})
         info.update({"samples": samples, "sample_parse_fails": fails,
+                     "n_sample_parse_fails": int(sum(1 for f in fails if f)),
                      "tie_all_different": bool(tie),
                      "vote_temperature": settings.vote_temperature})
         return chosen, info
