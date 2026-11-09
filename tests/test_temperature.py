@@ -1,5 +1,9 @@
+import os
+import tempfile
 import unittest
 from unittest.mock import patch
+
+os.environ["MAFIA_RAW_DIR"] = tempfile.mkdtemp(prefix="mafia-test-raw-")
 
 from src import llm_client
 from src.config import settings
