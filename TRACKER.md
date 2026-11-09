@@ -1,9 +1,9 @@
 # TRACKER — Mafia Arena Thesis
 
-**Last updated:** 2026-11-04
-**Branch:** `feature/parallel-arena-tau-sweep` (merge into `main`)
-**Status:** Pilot validated → ready for the 200-game MVP
-**Budget:** increased; ~Rs.2.2/game measured, ~Rs.440 for 200 games
+**Last updated:** 2026-11-06
+**Branch:** `prereg-mvp` (from `305e989`)
+**Status:** Pre-registered team-design MVP implemented with mocked tests. Awaiting smoke approval. No live team game has run.
+**Budget:** Rs.2,000 hard cap (**assumed**); Rs.400 reserve; Rs.1,600 usable. Team costs remain **assumed** until calibration.
 
 This is the live status file. `ROADMAP.md` is the plan; this file records what is
 actually done, what the logs prove, and what to do next.
@@ -20,7 +20,11 @@ actually done, what the logs prove, and what to do next.
 | `TAU_DELAY` | **0.35** (adopted after sweep) |
 | `EVT_THRESHOLD` | 0.6 |
 | `LLM_MAX_TOKENS` | 2500 |
-| Temperature | 0.3 dialogue / 0.0 JSON |
+| Temperature | 0.3 dialogue / 0.0 reasoning+night+probe / 0.7 every vote sample |
+| Design | `--design team`: village arm vs fixed CoT mafia; focal design retained for pilot |
+| Confirmatory arms | `dmn_village`, `cot_village`, `cotx3_village`; planned 184 trios, n re-decided after calibration |
+| Null arms | `random_village`, `majority_village` (no village LLM calls) |
+| Pre-registration | `docs/PREREGISTRATION.md` (2026-11-06, freeze pending) |
 | Canonical dataset | `logs/games.parquet` — **14 games** (`pilot-clean-02` 8 + `pilot-clean-03` 6) |
 | Canonical votes / trust | `logs/votes.parquet` (229 rows) / `logs/trust.parquet` (41 rows) |
 | Total measured cost | **Rs.30.92** billed, **Rs.2.21/game** |
@@ -49,6 +53,10 @@ Config is a `.env` switch only; no secrets are committed.
 | 12 | Logging: per-run bundles, canonical upsert, per-run billed INR, raw traces | Done | `logs/runs/<run_tag>/`, `logs/progress.jsonl` |
 | 13 | Streamlit dashboard | Built; verify against latest schema | `src/eval/dashboard.py` |
 | 14 | Docs: synopsis, design, roadmap, related work, enterprise guide | Done; refreshed 2026-11-04 | root `*.md`, `docs/` |
+| 15 | Team design, CoT-x3, null arms, trust probe for every arm | Implemented, mocked tests only | `src/eval/run_arena.py`, `src/agents/baselines.py`, `src/agents/null_agents.py`, `src/agents/base.py` |
+| 16 | Team metrics, paired/cluster stats, arm evaluation, blinded judge builder | Implemented, mocked tests only | `src/eval/metrics.py`, `src/eval/stats.py`, `src/eval/evaluate.py`, `src/eval/judge_delay.py` |
+| 17 | Pre-registration and confirmatory runtime gate | Written, freeze pending | `docs/PREREGISTRATION.md`, `src/eval/run_arena.py` (`--confirmatory`) |
+| 18 | Mocked test suite | Implemented; see Phase 4 report for count | `tests/` (`python -m unittest discover`) |
 
 ---
 
@@ -107,7 +115,7 @@ Overall system metrics:
 | Baselines never emit `commitment`, so `citation_valid` is asymmetric | Say-do-gap is dmn-only by design; must be labeled as such | State it in thesis; optionally add commitment to baselines |
 | Jev gate not live-tested | Phase 3 claim unsupported | 10-game `--gate jev` ablation |
 | Games average 2.1 days (cap 5) | Short games reduce vote/trust signal | Keep cap; report length; maybe raise to 7 in a separate cell |
-| No unit/integration test suite | Regressions caught only by smoke runs | Add minimal pytest for engine + metrics + JSON repair |
+| Mocked tests cover code, but no live team game has run | Team behaviour and real costs unproven | Rs.40 smoke with approval, then 20-trio calibration batch |
 | Canonical run completed at `git_sha=f729c57`; default tau change is `12c434d` | Repro metadata is correct but code moved | Record `git_sha` per row (already done); re-run MVP on frozen commit |
 | Manifest lacks run-level totals (`cost`, `completed`, `games`) | Harder to audit a bundle | Add aggregate fields to `manifest.json` |
 | Dashboard not re-verified against latest columns | Possible stale UI | Run `streamlit run src/eval/dashboard.py` before demo |
@@ -116,36 +124,27 @@ Overall system metrics:
 
 ## 6. Next steps (ordered)
 
-### Immediate — freeze and checkpoint
-1. Freeze code at this commit; tag `pilot-v0.2`.
-2. Archive the 14-game canonical set:
-   ```bash
-   mkdir -p logs/archive/pilot-clean-14
-   mv logs/games.parquet logs/votes.parquet logs/trust.parquet logs/archive/pilot-clean-14/
-   ```
-3. Optional fast checkpoint: `--games 10` (40 games, ~Rs.90) to confirm the pipeline at scale.
+### Immediate — smoke, then calibration (both need approval)
+1. Rs.40 pipeline smoke test (exact command in the Phase 4 report). Do not start confirmatory games.
+2. Calibration batch: first 20 seed-trios. Report only cost, JSON failures, length, probe cost, within-seed correlation, and CoT-x3 diversity.
+3. Re-decide n from measured costs (`docs/PREREGISTRATION.md` §9), then seek approval for the remaining trios.
 
-### MVP — 200 games
+### MVP — pre-registered team design
 ```bash
 python -m src.eval.run_arena \
-  --games 50 --agents dmn_tpn,cot,react,constitution \
-  --seed 0 --workers 6 --tau 0.35 --run-tag mvp-clean-01
+  --design team --arms dmn_village,cot_village,cotx3_village \
+  --games 184 --seed 5000 --tau 0.35 --confirmatory \
+  --budget-cap 1600 --workers 6 --run-tag mvp-team-01
 python -m src.eval.evaluate --input logs/games.parquet
 ```
-Expected: ~8–10 h on 6 workers, ~Rs.440. Do not change prompts or engine during the run.
+Planned spend is within the Rs.1,600 usable budget (**derived/assumed** costs). Rs.400 reserve stays untouched.
 
-### Ablations — 3 × 20 games
-```bash
-python -m src.eval.run_arena --games 20 --agents dmn_tpn --ablate exformation --run-tag abl-no-exformation
-python -m src.eval.run_arena --games 20 --agents dmn_tpn --ablate tpn        --run-tag abl-no-tpn
-python -m src.eval.run_arena --games 20 --agents dmn_tpn --ablate evt        --run-tag abl-no-evt
-```
-
-### Jev — 10 games
-```bash
-python -m src.eval.run_arena --games 10 --agents dmn_tpn --gate jev --run-tag jev-01
-```
-Compare ECE, latency, cost, JSON/stub rate against the LLM gate.
+### After the primary — priority order (pre-registered §10)
+1. Jev village-team cell (30 games, exploratory).
+2. Ablations: no-EVT, no-exformation, no-TPN (20 DMN-village games each, exploratory).
+3. Mafia mirror cells (40 seed-sets, exploratory).
+4. Constitution village, then ReAct village (40 games each, exploratory).
+Each starts only if measured underspend covers the full cell. No partial cells.
 
 ### After evidence lands
 1. Write thesis Ch.4–5 tables from `logs/`.
