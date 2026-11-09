@@ -22,15 +22,39 @@ import pandas as pd
 from src.config import settings
 
 
-def truncate_before_vote(history):
+def truncate_before_vote(history, day=None):
+    """History up to (not including) the sampled day's vote (F14).
+
+    With day=None the old first-vote behaviour is kept for callers that
+    only have day-0 histories. With a day, earlier days' votes/results
+    stay visible (they happened before) and truncation stops at that
+    day's vote/result.
+    """
     out = []
     for h in history:
         phase = str(h.get("phase", ""))
-        if phase.startswith("vote-") or phase.startswith("result-"):
-            break
+        if day is None:
+            if phase.startswith("vote-") or phase.startswith("result-"):
+                break
+        else:
+            if phase in (f"vote-{day}", f"result-{day}"):
+                break
         out.append({"turn": h.get("turn"), "speaker": h.get("speaker"),
                     "text": h.get("text"), "phase": phase})
     return out
+
+
+def _was_lynched(grp) -> bool:
+    """True when the plurality target was actually lynched (F15).
+
+    The engine lynches only on a strict majority of alive voters, so a
+    plurality without a majority is not a lynch.
+    """
+    majority = str(grp["majority_vote"].iloc[0])
+    if majority == "no-lynch" or len(grp) == 0:
+        return False
+    n_for = int((grp["vote"].astype(str) == majority).sum())
+    return n_for > len(grp) / 2
 
 
 def _anonymise(history):
@@ -55,7 +79,7 @@ def build_sample(votes_df, histories, n_delay=60, n_lynch=60, seed=20261106):
             if not (cause == "json_failure").all():
                 delay_days.append(item)
                 continue
-        if majority != "no-lynch":
+        if _was_lynched(grp):
             lynch_days.append(item)
     rng = random.Random(seed)
     rng.shuffle(delay_days)
@@ -82,7 +106,7 @@ def build_sample(votes_df, histories, n_delay=60, n_lynch=60, seed=20261106):
         hist = hist_by_game.get(item["game_id"])
         if not hist:
             continue
-        truncated = _anonymise(truncate_before_vote(hist))
+        truncated = _anonymise(truncate_before_vote(hist, day=item["day"]))
         if not truncated:
             continue
         sample.append({"blind_id": f"blind-{i:03d}", "history": truncated,
