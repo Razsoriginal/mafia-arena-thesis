@@ -53,6 +53,52 @@ class TestTeamAssignment(unittest.TestCase):
             if pid != 3:
                 self.assertIsInstance(ag, CotAgent)
 
+    def test_play_one_uses_requested_seed_for_every_arm(self):
+        # Through play_one (F46): same requested seed, same role map,
+        # arm recorded on the game and on every row.
+        import tempfile
+        from unittest.mock import patch
+
+        from src import llm_client
+        from src.eval import run_arena
+        from src.eval.run_arena import play_one
+
+        def fake_text(system, user, temperature=None, log=True, response_format=None):
+            return "I am watching the discussion."
+
+        def fake_json(system, user, meta=None, temperature=None):
+            if meta is not None:
+                meta.update({"parse_fail": False})
+            if "imaginative mind" in system:
+                return {"hypotheses": [{"suspect": "1", "motive": "quiet", "confidence": 0.8}]}
+            if "verifier mind" in system:
+                return {"verified": [{"suspect": "1", "evidence_spans": [0],
+                                      "contradiction_found": False, "revised_confidence": 0.8}]}
+            if "Output trust scores" in system:
+                return {"trust": {str(i): 0.6 for i in range(7)}}
+            if "night" in system.lower() or "You choose a night action" in system:
+                return {"kill": "0", "save": "0", "check": "1"}
+            if "must justify" in system:
+                return {"vote": "1", "reason": "t0 shows a claim"}
+            return {"vote": "1", "reason": "suspect"}
+
+        role_maps = {}
+        for arm in ("dmn_village", "cot_village", "cotx3_village"):
+            with tempfile.TemporaryDirectory() as td, patch.object(
+                llm_client, "chat_text", side_effect=fake_text
+            ), patch.object(llm_client, "chat_json", side_effect=fake_json), patch.object(
+                run_arena, "_log_progress", lambda *a, **k: None
+            ):
+                game = play_one(seed=5000, design="team", arm=arm,
+                                run_id=f"5000-{arm}", requested_seed=5000,
+                                max_days=1, run_dir=td, run_tag="mock")
+            self.assertEqual(game.seed, 5000)
+            self.assertEqual(game._arm, arm)
+            self.assertTrue(all(v["arm"] == arm for v in game._vote_rows))
+            role_maps[arm] = [(p.pid, p.role) for p in game.players]
+        self.assertEqual(role_maps["dmn_village"], role_maps["cot_village"])
+        self.assertEqual(role_maps["dmn_village"], role_maps["cotx3_village"])
+
     def test_seed_major_task_order(self):
         from src.eval.run_arena import build_tasks
 

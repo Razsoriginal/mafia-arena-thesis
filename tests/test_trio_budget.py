@@ -15,12 +15,35 @@ class TestTrioBudget(unittest.TestCase):
         self.assertEqual(len(groups[1]), 2)
 
     def test_cumulative_and_budget(self):
+        # Unit part: billed with estimate fallback (F18). The cross-
+        # invocation cap itself is covered by the main-level integration
+        # test in tests/test_run_integrity.py (F41).
         from src.eval.run_arena import _budget_exceeded, _cumulative_cost
 
         rows = [{"billed_cost_inr": 10.0}, {"billed_cost_inr": 5.5}, {}]
         self.assertAlmostEqual(_cumulative_cost(rows), 15.5)
         self.assertTrue(_budget_exceeded(rows, 15.0))
         self.assertFalse(_budget_exceeded(rows, 16.0))
+        rows2 = [{"billed_cost_inr": 0, "est_cost_inr": 2.5}]
+        self.assertAlmostEqual(_cumulative_cost(rows2), 2.5)
+
+    def test_ledger_total_sums_across_appends(self):
+        import os
+        import tempfile
+
+        from src.eval.run_arena import _append_ledger, _ledger_total
+
+        with tempfile.TemporaryDirectory() as td:
+            path = os.path.join(td, "ledger.jsonl")
+            _append_ledger(path, {"run_tag": "a", "requested_seed": 9000,
+                                  "arm": "cot_village", "game_id": "9000-cot_village",
+                                  "billed_cost_inr": 10.0, "est_cost_inr": 10.0},
+                           campaign="camp")
+            _append_ledger(path, {"run_tag": "b", "requested_seed": 9100,
+                                  "arm": "cot_village", "game_id": "9100-cot_village",
+                                  "billed_cost_inr": 0, "est_cost_inr": 5.5},
+                           campaign="camp")
+            self.assertAlmostEqual(_ledger_total(path), 15.5)
 
     def test_retry_once_on_worker_failure(self):
         from src.eval.run_arena import _run_one_with_retry

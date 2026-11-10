@@ -7,6 +7,7 @@
 
 prompts_sha256: d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc
 freeze_git_sha: PENDING
+runpath_sha256: PENDING
 
 Figures are tagged **measured**, **derived**, or **assumed**.
 
@@ -60,9 +61,9 @@ Permitted wording if the paired 95% CI includes zero: "The estimated village win
 
 ## 6. Trust probe
 
-Option (i) is adopted: probe every arm, including DMN, on identical targets, and compare probe to probe. DMN decision-linked trust is reported separately and is never compared head-to-head with another arm's probe trust.
+Option (i) is adopted: probe every arm, including DMN, with the same prompt and target rule, and compare probe to probe. DMN decision-linked trust is reported separately and is never compared head-to-head with another arm's probe trust.
 
-The probe runs after the day's votes, using the same pre-vote public history snapshot plus that seat's private note. It includes no DMN confidence, trust, or trace. Its output never enters game history, later speech, or any vote, and never feeds back into decisions. Targets are every alive non-self player that day, for every alive village seat in an LLM arm. Null arms are not probed, because probing would require an LLM call and would break their definition.
+The probe runs after the day's votes, using the same pre-vote public history snapshot plus that seat's private note. It includes no DMN confidence, trust, or trace. Its output never enters game history, later speech, or any vote, and never feeds back into decisions. Targets follow the same rule in every arm: all alive non-self players at that seat-day, for every alive village seat in an LLM arm (amended wording, F35: arms diverge after kills/lynches, so the rule is identical, not the realised set). Null arms are not probed, because probing would require an LLM call and would break their definition. Probe rows are `elicited`, never TPN-`verified`, and carry `parse_fail` so missingness is reported by arm.
 
 Probe inputs and outputs are recorded with `trust_source = "probe"`. DMN decision-linked rows are recorded with `trust_source = "decision"`. The two sources are reported in separate calibration tables and never merged into one ECE, Brier, or AUC number.
 
@@ -70,7 +71,7 @@ DMN decision-linked trust uses verified rows for its headline descriptive calibr
 
 Costs: the probe is Rs.0.25 per probed game, **derived/assumed**, until measured in the calibration batch.
 
-Frozen probe wording: "Calibration comparisons use post-vote elicited trust, collected with an identical prompt, on identical alive non-self targets, in every arm including DMN. DMN decision-linked trust, derived from TPN-verified confidences with a base-rate prior for unverified players, is reported separately as a mechanistic descriptor and is never compared head-to-head with another arm's probe trust."
+Frozen probe wording: "Calibration comparisons use post-vote elicited trust, collected with an identical prompt and target rule (all alive non-self players at that seat-day), in every arm including DMN. DMN decision-linked trust, derived from TPN-verified confidences with a base-rate prior for unverified players, is reported separately as a mechanistic descriptor and is never compared head-to-head with another arm's probe trust."
 
 ## 7. Null arms
 
@@ -86,7 +87,9 @@ Null claim wording: "Against the same fixed CoT mafia, a village voting uniforml
 
 ## 8. Temperatures and frozen parameters
 
-Vote-temperature amendment: every vote-sample call in every arm runs at 0.7, including the DMN cited vote. DMN and TPN reasoning, night actions, and the probe run at 0.0. CoT-x3 takes 3 samples at 0.7 and uses majority voting. If all three samples differ, the first sample stands. Its extra samples do not re-sample after a tie.
+Vote-temperature amendment: every vote-sample call in every arm runs at 0.7 on its first attempt, including the DMN cited vote. DMN and TPN reasoning, night actions, and the probe run at 0.0. CoT-x3 takes 3 samples at 0.7 and uses majority voting. If all counted samples differ, the first valid sample stands (amended wording, F38). Its extra samples do not re-sample after a tie.
+
+Retry amendment (F4/F5, judgement call): the pilot-consistent retry, JSON-repair (at 0.0) and empty-content token-escalation behaviour is kept. The 0.7 contract applies to first-attempt samples; retries, repairs and escalations are logged per call (temperature, max_tokens, attempt, repair/escalated flags, requested vs realised model) and their rates are reported by arm. The alternative — disabling them in confirmatory mode — was rejected to stay comparable with the pilot. `days` in game rows is the day count (a first-day game is 1, a 5-day cap is 5); pilot parquet stored the zero-based last-day index, so pilot lengths need +1 to compare. Freeze identity is the freeze tag plus `runpath_sha256` over the run path (`src/agents`, `src/mafia`, `src/llm_client.py`, `src/config.py`, `src/eval/run_arena.py`); analysis-only files are excluded.
 
 Speak and dialogue run at 0.3 in every arm. All other frozen parameters are:
 
@@ -120,6 +123,8 @@ Calibration go and no-go rules:
 - Other worker failures: rerun the exact task once. A second failure leaves that seed-trio pending and is reported.
 
 No interim efficacy stopping is allowed. Games are run seed-major, as complete trios. Cumulative billed cost is checked after each trio against the usable Rs.1,600. If the cap is exceeded after a completed trio, remaining trios stop. Completed trios are analysed as recorded, expensive and long games are never trimmed, and seeds are never replaced after observing a failure.
+
+Run-path amendment (F1/F2/F16/F17/F19/F26): spend is enforced against an append-only ledger (`logs/spend_ledger.jsonl`, billed with estimate fallback, flagged) across all invocations, smoke and `--no-canonical` included. Confirmatory runs use a fixed `--campaign` with `--start-trio`/`--trios`/`--resume` on the 5000+100·i series; canonical upsert keys on (campaign, requested_seed, arm), a trio reaches canonical only when complete, and a 402 or second worker failure marks it pending (`logs/pending_trios.json`) with partial output in the run bundle only and spend still ledgered. `--calibration --trios 20` writes a nuisance-only `calibration_report.json` (cost, JSON rate, length, probe missingness, within-seed length correlation, x3 non-unanimity; never arm outcomes), and continuation past trio 20 refuses to start until a human-created `logs/calibration_go.json` exists. Outcome-by-arm evaluation requires `--unblind` and is refused while trios are pending.
 
 Calibration games count towards the confirmatory set only if the calibration decision is GO with no code, prompt, temperature, model, or protocol change. If a change occurs, they are excluded and the seed list restarts. This is a **judgement call**; the alternative is to always exclude the calibration batch and spend its cost as burn-in.
 

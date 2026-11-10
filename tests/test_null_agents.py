@@ -40,16 +40,26 @@ class TestNullAgents(unittest.TestCase):
         self.assertEqual(v2, "no-lynch")
 
     def test_no_llm_calls(self):
+        # Patch the client module itself (every import path), and include
+        # the probe: a direct llm_client import in a null agent must fail
+        # this test (F44).
         from src.agents.null_agents import MajorityFollowerAgent, RandomVoterAgent
 
-        with patch("src.agents.base.llm.chat_json", side_effect=AssertionError("llm called")) as cj, patch(
+        with patch("src.llm_client.chat_json", side_effect=AssertionError("llm called")) as cj, patch(
+            "src.llm_client.chat_text", side_effect=AssertionError("llm called")
+        ) as ct, patch(
+            "src.agents.base.llm.chat_json", side_effect=AssertionError("llm called")
+        ), patch(
             "src.agents.base.llm.chat_text", side_effect=AssertionError("llm called")
-        ) as ct:
+        ):
             for ag in (RandomVoterAgent(pid=0), MajorityFollowerAgent(pid=0)):
                 self.assertEqual(ag.speak("villager", "h"), "I am watching and waiting for evidence.")
                 ag.vote("doctor", "h", {}, prev_majority="1", seed=3, day=1, alive=[0, 1, 2])
                 self.assertEqual(ag.night_action("doctor", "h", [0, 1], [0, 1], "save"), "0")
                 self.assertEqual(ag.night_action("detective", "h", [0, 1, 2], [1, 2], "check"), "1")
+                trust, info = ag.elicit_trust_probe("villager", "h", [0, 1, 2])
+                self.assertEqual(trust, {})
+                self.assertFalse(info["probe"])
         self.assertEqual(cj.call_count, 0)
         self.assertEqual(ct.call_count, 0)
 
