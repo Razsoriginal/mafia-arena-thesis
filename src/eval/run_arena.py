@@ -91,6 +91,16 @@ PREREG_MAX_TOKENS = 2500
 PREREG_TEMP_DIALOGUE = 0.3
 PREREG_TEMP_JSON = 0.0
 PREREG_VOTE_TEMPERATURE = 0.7
+PREREG_PROVIDER = "aicredits"
+PREREG_BASE_URL = "https://aicredits.in/v1"
+PREREG_EVT_THRESHOLD = 0.6
+PREREG_NIGHT = "llm"
+PREREG_MAX_DAYS = 5
+PREREG_BUDGET_CAP = 1600.0
+PRIMARY_ARMS = ("dmn_village", "cot_village", "cotx3_village")
+NULL_ARMS = ("random_village", "majority_village")
+CONFIRMATORY_SEED_BASE = 5000
+CALIBRATION_TRIOS = 20
 
 
 def _prompt_hash() -> str:
@@ -98,6 +108,50 @@ def _prompt_hash() -> str:
     p = os.path.join(os.path.dirname(__file__), "..", "mafia", "prompts.py")
     with open(os.path.normpath(p), "rb") as f:
         return hashlib.sha256(f.read()).hexdigest()
+
+
+def _runpath_files():
+    """Files whose change alters what a game does (freeze identity, F9).
+
+    Analysis-only files (evaluate/stats/judge/dashboard/tests) are
+    excluded so analysis commits do not force a re-freeze.
+    """
+    root = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+    rels = []
+    for sub in ("agents", "mafia"):
+        d = os.path.join(root, sub)
+        if os.path.isdir(d):
+            for name in sorted(os.listdir(d)):
+                if name.endswith(".py"):
+                    rels.append(os.path.join(sub, name))
+    rels += ["llm_client.py", "config.py", os.path.join("eval", "run_arena.py")]
+    return [os.path.join(root, r) for r in rels]
+
+
+def _runpath_sha256() -> str:
+    import hashlib
+    h = hashlib.sha256()
+    root = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+    for path in _runpath_files():
+        rel = os.path.relpath(path, root).replace(os.sep, "/")
+        h.update(rel.encode())
+        h.update(b"\0")
+        try:
+            with open(path, "rb") as f:
+                h.update(f.read())
+        except Exception:
+            h.update(b"<missing>")
+        h.update(b"\0")
+    return h.hexdigest()
+
+
+def _is_dirty() -> bool:
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"], text=True).strip()
+        return bool(out)
+    except Exception:
+        return False
 
 
 def _prereg_expected():
@@ -118,6 +172,11 @@ def _prereg_expected():
     m = _re.search(r"freeze_git_sha:\s*([0-9a-f]{7,40})", text)
     if m:
         out["git_sha"] = m.group(1)
+    m = _re.search(r"runpath_sha256:\s*([0-9a-f]{64})", text)
+    if m:
+        out["runpath_sha256"] = m.group(1)
+    out["has_pending"] = "PENDING" in text
+    out["raw_text"] = text
     return out
 
 
@@ -129,10 +188,43 @@ def _assert_confirmatory(args):
         errors.append("confirmatory requires --design team")
     if getattr(args, "gate", None) != "llm":
         errors.append("confirmatory requires --gate llm")
+    if getattr(args, "night", PREREG_NIGHT) != PREREG_NIGHT:
+        errors.append(f"confirmatory requires --night {PREREG_NIGHT} (F22)")
+    if int(getattr(args, "max_days", PREREG_MAX_DAYS) or 0) != PREREG_MAX_DAYS:
+        errors.append(f"confirmatory requires --max-days {PREREG_MAX_DAYS} (F21)")
     if getattr(args, "ablate", ""):
         errors.append("confirmatory requires empty --ablate")
     if getattr(args, "tau", None) is None or float(args.tau) != PREREG_TAU:
         errors.append(f"confirmatory requires --tau {PREREG_TAU} passed explicitly")
+    # arm set: primary trio required, nulls only as a complete pair (F23)
+    arms_raw = getattr(args, "arms", "") or ""
+    arm_set = {a.strip() for a in str(arms_raw).split(",") if a.strip()}
+    if not set(PRIMARY_ARMS).issubset(arm_set):
+        errors.append(f"confirmatory requires primary arms {list(PRIMARY_ARMS)} (F23)")
+    extra = arm_set - set(PRIMARY_ARMS) - set(NULL_ARMS)
+    if extra:
+        errors.append(f"confirmatory arms include unallowed {sorted(extra)} (F23)")
+    null_present = arm_set & set(NULL_ARMS)
+    if null_present and null_present != set(NULL_ARMS):
+        errors.append("confirmatory null arms must be both or neither (F23)")
+    # seed series (F19/F20): base 5000, step 100, via --start-trio offset
+    seed_val = getattr(args, "seed", None)
+    if seed_val is None or int(seed_val) != CONFIRMATORY_SEED_BASE:
+        errors.append(f"confirmatory requires --seed {CONFIRMATORY_SEED_BASE} series (F20)")
+    # budget cap at/below usable budget (F26)
+    cap = getattr(args, "budget_cap", None)
+    if cap is None or float(cap) > PREREG_BUDGET_CAP:
+        errors.append(f"confirmatory requires --budget-cap <= {PREREG_BUDGET_CAP} (F26)")
+    # planned trios 120-184 (F24 is per-campaign, not per-invocation)
+    planned = getattr(args, "planned_trios", None)
+    if planned is not None and not (120 <= int(planned) <= 184):
+        errors.append("confirmatory --planned-trios must be 120-184 (Tier 2)")
+    if not getattr(args, "campaign", None):
+        errors.append("confirmatory requires --campaign (F2)")
+    if settings.provider != PREREG_PROVIDER:
+        errors.append(f"provider {settings.provider} != pre-registered {PREREG_PROVIDER} (F7)")
+    if settings.base_url != PREREG_BASE_URL:
+        errors.append(f"base_url {settings.base_url} != pre-registered {PREREG_BASE_URL} (F7)")
     if settings.model != PREREG_MODEL:
         errors.append(f"model {settings.model} != pre-registered {PREREG_MODEL}")
     if settings.max_tokens != PREREG_MAX_TOKENS:
@@ -143,9 +235,17 @@ def _assert_confirmatory(args):
         errors.append(f"temp_json {settings.temp_json} != {PREREG_TEMP_JSON}")
     if settings.vote_temperature != PREREG_VOTE_TEMPERATURE:
         errors.append(f"vote_temperature {settings.vote_temperature} != {PREREG_VOTE_TEMPERATURE}")
+    if float(settings.evt_threshold) != PREREG_EVT_THRESHOLD:
+        errors.append(f"EVT_THRESHOLD {settings.evt_threshold} != {PREREG_EVT_THRESHOLD} (F25)")
+    if getattr(args, "_skip_dirty_check", False) is not True and _is_dirty():
+        errors.append("confirmatory requires a clean working tree (F9)")
     expected = _prereg_expected()
+    if expected.get("has_pending"):
+        errors.append("confirmatory refused while pre-registration freeze is PENDING (F8)")
     if "prompt_hash" in expected and _prompt_hash() != expected["prompt_hash"]:
         errors.append("prompt hash differs from pre-registration")
+    if "runpath_sha256" in expected and _runpath_sha256() != expected["runpath_sha256"]:
+        errors.append("runpath hash differs from pre-registration freeze (F9)")
     if "git_sha" in expected and _git_sha() not in (expected["git_sha"],):
         # allow full vs short prefix match
         if not expected["git_sha"].startswith(_git_sha()) and not _git_sha().startswith(expected["git_sha"][:7]):
@@ -165,6 +265,13 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
         "arms": getattr(args, "arms", None),
         "probe_enabled": getattr(args, "design", "focal") == "team",
         "prompt_hash": _prompt_hash(),
+        "prompts_sha256": _prompt_hash(),
+        "runpath_sha256": _runpath_sha256(),
+        "campaign": getattr(args, "campaign", None),
+        "planned_trios": getattr(args, "planned_trios", None),
+        "start_trio": getattr(args, "start_trio", 0),
+        "trios": getattr(args, "trios", None),
+        "spend_ledger": _ledger_path(args),
         "budget_cap_inr": getattr(args, "budget_cap", 1600.0),
         "calibration_trios": getattr(args, "calibration_trios", 20),
         "confirmatory": bool(getattr(args, "confirmatory", False)),
@@ -578,12 +685,222 @@ def _group_trios(tasks):
     return groups
 
 
+def _effective_cost(row) -> float:
+    """Billed cost, falling back to the estimate when billing is absent (F18)."""
+    try:
+        billed = float(row.get("billed_cost_inr") or 0)
+    except Exception:
+        billed = 0.0
+    if billed > 0:
+        return billed
+    try:
+        return float(row.get("est_cost_inr") or 0)
+    except Exception:
+        return 0.0
+
+
 def _cumulative_cost(rows) -> float:
-    return float(sum(float(r.get("billed_cost_inr") or 0) for r in rows))
+    return float(sum(_effective_cost(r) for r in rows))
 
 
 def _budget_exceeded(rows, cap) -> bool:
     return cap is not None and _cumulative_cost(rows) > float(cap)
+
+
+def _ledger_path(args=None) -> str:
+    if args is not None and getattr(args, "spend_ledger", None):
+        return args.spend_ledger
+    return os.getenv("MAFIA_SPEND_LEDGER", "logs/spend_ledger.jsonl")
+
+
+def _pending_path(args=None) -> str:
+    if args is not None and getattr(args, "pending_file", None):
+        return args.pending_file
+    return os.getenv("MAFIA_PENDING_FILE", "logs/pending_trios.json")
+
+
+def _calibration_go_path(args=None) -> str:
+    if args is not None and getattr(args, "calibration_go", None):
+        return args.calibration_go
+    return os.getenv("MAFIA_CALIBRATION_GO", "logs/calibration_go.json")
+
+
+def _ledger_total(path: str) -> float:
+    if not path or not os.path.exists(path):
+        return 0.0
+    total = 0.0
+    with open(path, encoding="utf-8") as f:
+        for line in f:
+            line = line.strip()
+            if not line:
+                continue
+            try:
+                rec = json.loads(line)
+                total += float(rec.get("cost_inr") or 0)
+            except Exception:
+                continue
+    return float(total)
+
+
+def _append_ledger(path: str, row: dict, campaign: str = ""):
+    """Append one completed game's spend (F1). Never rewrites history."""
+    if not path:
+        return
+    billed = row.get("billed_cost_inr")
+    try:
+        billed_f = float(billed or 0)
+    except Exception:
+        billed_f = 0.0
+    used_fallback = billed_f <= 0
+    rec = {
+        "ts": datetime.now(timezone.utc).isoformat(),
+        "run_tag": row.get("run_tag", ""),
+        "campaign": campaign or row.get("campaign", ""),
+        "requested_seed": row.get("requested_seed"),
+        "arm": row.get("arm"),
+        "game_id": row.get("game_id", ""),
+        "billed_cost_inr": billed_f,
+        "est_cost_inr": row.get("est_cost_inr"),
+        "cost_inr": _effective_cost(row),
+        "cost_fallback_est": bool(used_fallback),
+    }
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(rec) + "\n")
+
+
+def _load_pending(path: str) -> list:
+    if not path or not os.path.exists(path):
+        return []
+    try:
+        with open(path, encoding="utf-8") as f:
+            data = json.load(f)
+        return data if isinstance(data, list) else []
+    except Exception:
+        return []
+
+
+def _save_pending(path: str, items: list):
+    if not path:
+        return
+    d = os.path.dirname(path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(path, "w", encoding="utf-8") as f:
+        json.dump(items, f, indent=2)
+
+
+def _mark_pending(path: str, campaign: str, requested_seed, arms, reason: str):
+    items = _load_pending(path)
+    key = (campaign, requested_seed)
+    items = [it for it in items
+             if not (it.get("campaign") == key[0] and it.get("requested_seed") == key[1])]
+    items.append({"campaign": campaign, "requested_seed": requested_seed,
+                  "arms": list(arms), "reason": reason,
+                  "ts": datetime.now(timezone.utc).isoformat()})
+    _save_pending(path, items)
+
+
+def _clear_pending(path: str, campaign: str, requested_seed):
+    items = [it for it in _load_pending(path)
+             if not (it.get("campaign") == campaign
+                     and it.get("requested_seed") == requested_seed)]
+    _save_pending(path, items)
+
+
+def _completed_keys(out_path: str, campaign: str = "") -> set:
+    """(campaign, requested_seed, arm) already in canonical games (F2/F19)."""
+    keys = set()
+    if not out_path or not os.path.exists(out_path):
+        return keys
+    try:
+        df = pd.read_parquet(out_path)
+    except Exception:
+        return keys
+    if df.empty:
+        return keys
+    for _, r in df.iterrows():
+        camp = str(r.get("campaign", "")) if "campaign" in df.columns else ""
+        if campaign and camp and camp != campaign:
+            continue
+        try:
+            seed = int(r.get("requested_seed"))
+        except Exception:
+            continue
+        keys.add((camp or campaign, seed, str(r.get("arm", ""))))
+    return keys
+
+
+def _calibration_report(rows, votes_rows, trust_rows) -> dict:
+    """Nuisance-only calibration summary (F26). No arm outcomes, ever."""
+    import numpy as _np
+    by_arm_cost, by_arm_days, by_arm_json = {}, {}, {}
+    for r in rows:
+        arm = str(r.get("arm", ""))
+        by_arm_cost.setdefault(arm, []).append(_effective_cost(r))
+        try:
+            by_arm_days.setdefault(arm, []).append(float(r.get("days") or 0))
+        except Exception:
+            pass
+        try:
+            by_arm_json.setdefault(arm, []).append(float(r.get("json_failures") or 0))
+        except Exception:
+            pass
+    # within-seed length correlation (dmn vs cot paired by requested_seed)
+    days_by = {}
+    for r in rows:
+        days_by.setdefault(r.get("requested_seed"), {})[str(r.get("arm", ""))] = r.get("days")
+    pairs = [(float(v["dmn_village"]), float(v["cot_village"]))
+             for v in days_by.values()
+             if "dmn_village" in v and "cot_village" in v
+             and v["dmn_village"] is not None and v["cot_village"] is not None]
+    rho = None
+    if len(pairs) >= 3:
+        a = _np.array([p[0] for p in pairs], dtype=float)
+        b = _np.array([p[1] for p in pairs], dtype=float)
+        if a.std() > 0 and b.std() > 0:
+            rho = float(_np.corrcoef(a, b)[0, 1])
+    # CoT-x3 non-unanimity share from recorded vote samples
+    x3_total, x3_nonunan = 0, 0
+    for v in votes_rows or []:
+        if str(v.get("arm", "")) != "cotx3_village":
+            continue
+        samples = v.get("samples")
+        if isinstance(samples, (list, tuple)) and len(samples) >= 2:
+            counted = [str(s) for s in samples if s is not None]
+            if counted:
+                x3_total += 1
+                if len(set(counted)) > 1:
+                    x3_nonunan += 1
+    # probe missingness by arm (rows with parse_fail / all probe rows)
+    probe_miss = {}
+    for t in trust_rows or []:
+        if str(t.get("trust_source", "")) != "probe":
+            continue
+        arm = str(t.get("arm", ""))
+        tot, miss = probe_miss.get(arm, (0, 0))
+        probe_miss[arm] = (tot + 1, miss + (1 if t.get("parse_fail") else 0))
+    return {
+        "n_games": len(rows),
+        "cost_per_arm_inr": {k: round(float(sum(v)), 4) for k, v in by_arm_cost.items()},
+        "mean_cost_per_game_inr": {k: round(float(sum(v) / len(v)), 4)
+                                   for k, v in by_arm_cost.items() if v},
+        "json_failures_per_game": (float(sum(float(r.get("json_failures") or 0) for r in rows) / len(rows))
+                                   if rows else None),
+        "json_per_arm": {k: round(float(sum(v) / len(v)), 4) for k, v in by_arm_json.items() if v},
+        "mean_days": (float(sum(float(r.get("days") or 0) for r in rows) / len(rows)) if rows else None),
+        "mean_days_per_arm": {k: round(float(sum(v) / len(v)), 4) for k, v in by_arm_days.items() if v},
+        "within_seed_days_correlation": rho,
+        "cotx3_nonunanimity_share": (x3_nonunan / x3_total) if x3_total else None,
+        "cotx3_votes_with_samples": x3_total,
+        "probe_missingness_by_arm": {k: {"missing": m, "total": t,
+                                         "rate": (m / t if t else None)}
+                                     for k, (t, m) in probe_miss.items()},
+        "probe_cost_per_game_inr": None,
+        "probe_cost_note": "not separable from game billed cost; see cost_per_arm_inr",
+    }
 
 
 def _run_one_with_retry(task, runner=None):
@@ -655,6 +972,7 @@ def _run_task_once(task: dict) -> dict:
         "json_failures": dj,
         "jev_stub": jev_info.get("stub") if isinstance(jev_info, dict) else None,
         "design": task.get("design", "focal"),
+        "campaign": task.get("campaign") or task["run_tag"],
         "arm": task.get("arm") or task["focal"],
         "village_arm": (TEAM_ARMS[task["arm"]]["village"] if task.get("arm") in TEAM_ARMS else task["focal"]),
         "mafia_arm": (TEAM_ARMS[task["arm"]]["mafia"] if task.get("arm") in TEAM_ARMS else "cot"),
@@ -664,28 +982,39 @@ def _run_task_once(task: dict) -> dict:
             "trust": getattr(g, "_trust_rows", []) or []}
 
 
-def _record_result(result: dict, args, run_dir: str, rows: list):
+def _record_result(result: dict, args, run_dir: str, rows: list,
+                   canonical: bool = True, ledger_path: str = None,
+                   campaign: str = ""):
     row = result["row"]
     rows.append(row)
+    if ledger_path:
+        _append_ledger(ledger_path, row, campaign=campaign)
     gdf = pd.DataFrame([row])
     _upsert(os.path.join(run_dir, "games.parquet"), gdf, ["run_tag", "game_id"])
-    if not args.no_canonical:
-        _upsert(args.out, gdf, ["run_tag", "game_id"])
+    is_team = str(row.get("design", "")) == "team"
+    if canonical and not getattr(args, "no_canonical", False):
+        # Team canonical rows are idempotent on the campaign key (F2);
+        # focal rows keep the historical run_tag key.
+        gkeys = ["campaign", "requested_seed", "arm"] if is_team else ["run_tag", "game_id"]
+        _upsert(args.out, gdf, gkeys)
     if result["votes"]:
         vdf = pd.DataFrame(result["votes"])
         _upsert(os.path.join(run_dir, "votes.parquet"), vdf,
                 ["run_tag", "game_id", "day", "voter"])
-        if not args.no_canonical:
-            _upsert("logs/votes.parquet", vdf,
-                    ["run_tag", "game_id", "day", "voter"])
+        if canonical and not getattr(args, "no_canonical", False):
+            vkeys = (["game_id", "day", "voter", "arm"] if is_team
+                     else ["run_tag", "game_id", "day", "voter"])
+            _upsert(os.path.join(os.path.dirname(args.out) or ".", "votes.parquet"), vdf, vkeys)
     if result["trust"]:
         tdf = pd.DataFrame(result["trust"])
         _tkeys = ["run_tag", "game_id", "day", "agent", "target"]
         if "trust_source" in tdf.columns:
             _tkeys = _tkeys + ["trust_source"]
         _upsert(os.path.join(run_dir, "trust.parquet"), tdf, _tkeys)
-        if not args.no_canonical:
-            _upsert("logs/trust.parquet", tdf, _tkeys)
+        if canonical and not getattr(args, "no_canonical", False):
+            tkeys = (["game_id", "day", "agent", "target", "trust_source"]
+                     if is_team and "trust_source" in tdf.columns else _tkeys)
+            _upsert(os.path.join(os.path.dirname(args.out) or ".", "trust.parquet"), tdf, tkeys)
     print(f"[{row['run_tag']}] {row['game_id']}: {row['winner']} in {row['days']} days "
           f"role={row['focal_role']} json_failures={row['json_failures']}")
 
@@ -698,13 +1027,18 @@ def build_tasks(args, run_tag, run_dir, git_sha, ablations=None):
         for a in arms:
             if a not in TEAM_ARMS:
                 raise ValueError(f"unknown team arm: {a}")
+        n_trios = getattr(args, "trios", None)
+        n_trios = int(n_trios) if n_trios is not None else int(args.games)
+        start_trio = int(getattr(args, "start_trio", 0) or 0)
+        campaign = getattr(args, "campaign", None) or run_tag
         tasks = []
-        for i in range(args.games):
-            requested_seed = args.seed + i * 100
+        for i in range(n_trios):
+            requested_seed = args.seed + (start_trio + i) * 100
             for arm in arms:
                 tasks.append({
                     "requested_seed": requested_seed, "focal": arm, "arm": arm,
                     "design": "team", "run_id": f"{requested_seed}-{arm}",
+                    "campaign": campaign,
                     "gate": args.gate, "focal_role": "random",
                     "night_mode": args.night, "run_tag": run_tag,
                     "run_dir": run_dir, "max_days": args.max_days,
@@ -762,6 +1096,24 @@ def main():
     ap.add_argument("--budget-cap", type=float, default=1600.0,
                     help="cumulative billed Rs. cap; abort after current trio")
     ap.add_argument("--calibration-trios", type=int, default=20)
+    ap.add_argument("--campaign", type=str, default=None,
+                    help="fixed campaign tag for confirmatory/idempotent runs (F2)")
+    ap.add_argument("--start-trio", type=int, default=0,
+                    help="first trio index in the seed series (seed=5000+100*index)")
+    ap.add_argument("--trios", type=int, default=None,
+                    help="number of seed-trios to run (team design; default --games)")
+    ap.add_argument("--planned-trios", type=int, default=184,
+                    help="planned campaign size recorded in the manifest (120-184)")
+    ap.add_argument("--resume", action="store_true",
+                    help="rerun only pending or missing trios on the same seeds")
+    ap.add_argument("--calibration", action="store_true",
+                    help="calibration batch: nuisance-only report, no outcomes")
+    ap.add_argument("--spend-ledger", type=str, default=None,
+                    help="append-only spend ledger (default logs/spend_ledger.jsonl)")
+    ap.add_argument("--pending-file", type=str, default=None,
+                    help="pending trios file (default logs/pending_trios.json)")
+    ap.add_argument("--calibration-go", type=str, default=None,
+                    help="human GO file required past calibration (default logs/calibration_go.json)")
     ap.add_argument("--confirmatory", action="store_true",
                     help="enforce pre-registration checks before starting")
     ap.add_argument("--no-canonical", action="store_true",
@@ -776,41 +1128,71 @@ def main():
         ap.error(f"unknown ablation(s): {', '.join(sorted(unknown))}")
     _assert_confirmatory(args)
 
-    run_tag = args.run_tag or time.strftime("%Y%m%d-%H%M%S")
+    run_tag = args.run_tag or getattr(args, "campaign", None) or time.strftime("%Y%m%d-%H%M%S")
+    campaign = getattr(args, "campaign", None) or run_tag
     os.environ["MAFIA_RUN_TAG"] = run_tag
-    run_dir = os.path.join("logs", "runs", run_tag)
+    runs_root = os.getenv("MAFIA_RUNS_DIR", os.path.join("logs", "runs"))
+    run_dir = os.path.join(runs_root, run_tag)
     os.makedirs(os.path.join(run_dir, "raw"), exist_ok=True)
     os.environ["MAFIA_RAW_DIR"] = os.path.join(run_dir, "raw")
     git_sha = _git_sha()
     _write_manifest(os.path.join(run_dir, "manifest.json"), args, run_tag, git_sha)
+    ledger_path = _ledger_path(args)
+    pending_path = _pending_path(args)
+    go_path = _calibration_go_path(args)
+    # Calibration continuation gate (F26): past trio 20 needs a human GO.
+    if getattr(args, "confirmatory", False) and not getattr(args, "calibration", False):
+        if int(getattr(args, "start_trio", 0) or 0) >= CALIBRATION_TRIOS and not os.path.exists(go_path):
+            raise SystemExit(
+                f"Confirmatory continuation refused: {go_path} missing. "
+                "Create it after reviewing calibration_report.json.")
+    if (_ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0))
+            and getattr(args, "budget_cap", None) is not None):
+        print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} already exceeded "
+              f"(ledger Rs.{_ledger_total(ledger_path):.2f}); no games started.")
+        print(f"Run bundle: {run_dir}")
+        return
 
     tasks = build_tasks(args, run_tag, run_dir, git_sha, ablations=ablations)
+    if getattr(args, "design", "focal") == "team" and not args.no_canonical:
+        completed = _completed_keys(args.out, campaign)
+        dup = [t for t in tasks
+               if (campaign, t["requested_seed"], t["arm"]) in completed]
+        if dup and not getattr(args, "resume", False):
+            raise SystemExit(
+                f"{len(dup)} task(s) already completed for campaign {campaign}; "
+                "use --resume to rerun only pending/missing trios (F2/F19).")
+        if getattr(args, "resume", False):
+            tasks = [t for t in tasks
+                     if (campaign, t["requested_seed"], t["arm"]) not in completed]
 
     rows = []
+    all_votes, all_trust = [], []
     if getattr(args, "design", "focal") == "team":
         aborted = False
-        for trio in _group_trios(tasks):
+        start_trio = int(getattr(args, "start_trio", 0) or 0)
+        for pos, trio in enumerate(_group_trios(tasks)):
             if aborted:
                 break
+            trio_index = start_trio + pos
+            seed0 = trio[0]["requested_seed"] if trio else None
+            arm_names = [t["arm"] for t in trio]
+            results, billing_hit, failed = [], False, False
             if args.workers > 1 and len(trio) > 1:
                 ex = ProcessPoolExecutor(max_workers=min(args.workers, len(trio)))
                 futures = {ex.submit(_run_task, t): t for t in trio}
                 try:
                     for fut in as_completed(futures):
+                        t = futures[fut]
                         try:
-                            result = fut.result()
+                            results.append(fut.result())
                         except BillingExhausted as e:
-                            t = futures[fut]
                             print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
-                            print(f"[{run_tag}] trio pending; top up and rerun same seeds.")
-                            aborted = True
-                            break
+                            billing_hit = True
                         except Exception as e:
-                            t = futures[fut]
                             print(f"[{run_tag}] worker failed for {t['run_id']}: "
                                   f"{type(e).__name__}: {e}")
-                            continue
-                        _record_result(result, args, run_dir, rows)
+                            failed = True
                 finally:
                     for f in futures:
                         f.cancel()
@@ -818,20 +1200,51 @@ def main():
             else:
                 for t in trio:
                     try:
-                        result = _run_task(t)
+                        results.append(_run_task(t))
                     except BillingExhausted as e:
                         print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
-                        print(f"[{run_tag}] trio pending; top up and rerun same seeds.")
-                        aborted = True
+                        billing_hit = True
                         break
                     except Exception as e:
                         print(f"[{run_tag}] worker failed for {t['run_id']}: "
                               f"{type(e).__name__}: {e}")
-                        continue
-                    _record_result(result, args, run_dir, rows)
-            if not aborted and _budget_exceeded(rows, getattr(args, "budget_cap", 1600.0)):
+                        failed = True
+            for r in results:
+                all_votes.extend(r.get("votes") or [])
+                all_trust.extend(r.get("trust") or [])
+            if billing_hit or failed or len(results) != len(trio):
+                # Atomicity (F2/F16/F17): partial trio stays in the bundle
+                # only, spend is still ledgered, trio marked pending.
+                for r in results:
+                    _record_result(r, args, run_dir, rows, canonical=False,
+                                   ledger_path=ledger_path, campaign=campaign)
+                _mark_pending(pending_path, campaign, seed0, arm_names,
+                              "billing_exhausted" if billing_hit else "worker_failure")
+                print(f"[{run_tag}] trio {seed0} pending "
+                      f"({'billing' if billing_hit else 'worker failure'}); "
+                      "rerun with --resume on the same seeds.")
+                if billing_hit:
+                    aborted = True
+                    break
+                continue
+            for r in results:
+                _record_result(r, args, run_dir, rows, canonical=True,
+                               ledger_path=ledger_path, campaign=campaign)
+            _clear_pending(pending_path, campaign, seed0)
+            if _ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0)):
                 print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
-                      f"(spent Rs.{_cumulative_cost(rows):.2f}); aborting remaining trios.")
+                      f"(ledger Rs.{_ledger_total(ledger_path):.2f}); aborting remaining trios.")
+                break
+            if (getattr(args, "confirmatory", False)
+                    and not getattr(args, "calibration", False)
+                    and trio_index + 1 >= CALIBRATION_TRIOS
+                    and not os.path.exists(go_path)):
+                report = _calibration_report(rows, all_votes, all_trust)
+                with open(os.path.join(run_dir, "calibration_report.json"), "w", encoding="utf-8") as f:
+                    json.dump(report, f, indent=2)
+                print(f"[{run_tag}] calibration pause after {trio_index + 1} trios; "
+                      f"report in {run_dir}/calibration_report.json. "
+                      f"Create {go_path} to continue.")
                 break
     elif args.workers > 1 and len(tasks) > 1:
         ex = ProcessPoolExecutor(max_workers=min(args.workers, len(tasks)))
@@ -850,7 +1263,8 @@ def main():
                     print(f"[{run_tag}] worker failed for {t['run_id']}: "
                           f"{type(e).__name__}: {e}")
                     continue
-                _record_result(result, args, run_dir, rows)
+                _record_result(result, args, run_dir, rows,
+                               ledger_path=ledger_path, campaign=campaign)
         finally:
             for f in futures:
                 f.cancel()
@@ -863,14 +1277,20 @@ def main():
                 print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
                 print(f"[{run_tag}] stopping; top up AiCredits and rerun.")
                 break
-            _record_result(result, args, run_dir, rows)
+            _record_result(result, args, run_dir, rows,
+                           ledger_path=ledger_path, campaign=campaign)
 
+    if getattr(args, "calibration", False):
+        report = _calibration_report(rows, all_votes, all_trust)
+        with open(os.path.join(run_dir, "calibration_report.json"), "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+        print(f"Calibration report (nuisance only): {run_dir}/calibration_report.json")
     df = pd.DataFrame(rows)
     if args.no_canonical:
         print(f"\nSaved {len(rows)} rows to {run_dir}/games.parquet (canonical skipped)")
     else:
         print(f"\nSaved {len(rows)} rows to {args.out} and {run_dir}/games.parquet")
-    if len(df):
+    if len(df) and not getattr(args, "calibration", False):
         print(df[["focal", "winner", "focal_role"]].value_counts(dropna=False))
     print(f"Run bundle: {run_dir}")
 

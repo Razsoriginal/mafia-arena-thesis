@@ -4,7 +4,13 @@ import random
 from .base import BaseAgent
 
 
-class RandomVoterAgent(BaseAgent):
+class _NullMixin:
+    def elicit_trust_probe(self, role, history, alive):
+        # Null seats never call the LLM, even if probed by mistake (F44).
+        return {}, {"probe": False, "parse_fail": False, "null": True}
+
+
+class RandomVoterAgent(_NullMixin, BaseAgent):
     name = "random_voter"
 
     def vote(self, role, history, trust, prev_majority=None, seed=None,
@@ -26,7 +32,7 @@ class RandomVoterAgent(BaseAgent):
         return str(opts[0]) if opts else None
 
 
-class MajorityFollowerAgent(BaseAgent):
+class MajorityFollowerAgent(_NullMixin, BaseAgent):
     name = "majority_follower"
 
     def vote(self, role, history, trust, prev_majority=None, seed=None,
