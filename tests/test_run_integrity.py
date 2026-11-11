@@ -75,7 +75,7 @@ class _MainEnv(unittest.TestCase):
 
 class TestCumulativeLedger(_MainEnv):
     ARGS = ["--design", "team", "--arms", "dmn_village,cot_village,cotx3_village",
-            "--seed", "9000", "--workers", "1", "--budget-cap", "35"]
+            "--seed", "9000", "--workers", "1", "--tau", "0.35", "--budget-cap", "35"]
 
     def test_second_invocation_sees_first_invocations_spend(self):
         fake = _synthetic({"dmn_village": 10.0, "cot_village": 10.0, "cotx3_village": 10.0})
@@ -83,14 +83,14 @@ class TestCumulativeLedger(_MainEnv):
                                     "--trios", "1", "--out", self.out], fake)
         self.assertAlmostEqual(run_arena._ledger_total(os.environ["MAFIA_SPEND_LEDGER"]), 30.0)
         self.assertEqual(len(pd.read_parquet(self.out)), 3)
-        # Second invocation asks for 2 more trios; the ledger cap must
-        # stop it after the first additional trio (30 + 30 > 35).
+        # Second invocation asks for 2 more trios; in-flight projection
+        # (ledger 30 + projected trio > cap 35) must start zero (G4).
         self._run_main(self.ARGS + ["--campaign", "camp-a", "--run-tag", "r2",
                                     "--seed", "9000", "--start-trio", "1",
                                     "--trios", "2", "--out", self.out,
                                     "--resume"], fake)
-        self.assertEqual(len(pd.read_parquet(self.out)), 6)
-        self.assertAlmostEqual(run_arena._ledger_total(os.environ["MAFIA_SPEND_LEDGER"]), 60.0)
+        self.assertEqual(len(pd.read_parquet(self.out)), 3)
+        self.assertAlmostEqual(run_arena._ledger_total(os.environ["MAFIA_SPEND_LEDGER"]), 30.0)
         df = pd.read_parquet(self.out)
         self.assertEqual(df.duplicated(subset=["campaign", "requested_seed", "arm"]).sum(), 0)
 
@@ -102,7 +102,7 @@ class TestCumulativeLedger(_MainEnv):
 
 class TestAtomicTrio(_MainEnv):
     ARGS = ["--design", "team", "--arms", "dmn_village,cot_village,cotx3_village",
-            "--seed", "9000", "--workers", "1", "--budget-cap", "1600"]
+            "--seed", "9000", "--workers", "1", "--tau", "0.35", "--budget-cap", "1600"]
 
     def test_402_mid_trio_is_pending_and_resume_is_idempotent(self):
         costs = {"dmn_village": 5.0, "cot_village": 5.0, "cotx3_village": 5.0}

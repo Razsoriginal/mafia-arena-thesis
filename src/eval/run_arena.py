@@ -725,25 +725,101 @@ def _calibration_go_path(args=None) -> str:
     return os.getenv("MAFIA_CALIBRATION_GO", "logs/calibration_go.json")
 
 
+def _calibration_report_path(args=None) -> str:
+    if args is not None and getattr(args, "calibration_report", None):
+        return args.calibration_report
+    return os.getenv("MAFIA_CALIBRATION_REPORT", "logs/calibration_report.json")
+
+
+def _file_sha256(path: str):
+    import hashlib
+    if not path or not os.path.exists(path):
+        return None
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        h.update(f.read())
+    return h.hexdigest()
+
+
+def _validate_calibration_go(go_path: str, campaign: str, report_path: str):
+    """(ok, reason). GO must bind campaign + current report hash (G7)."""
+    if not go_path or not os.path.exists(go_path):
+        return False, "GO file missing"
+    try:
+        with open(go_path, encoding="utf-8") as f:
+            text = f.read()
+        if not text.strip():
+            return False, "GO file empty"
+        go = json.loads(text)
+    except Exception as e:
+        return False, f"GO file unparseable: {e}"
+    if not isinstance(go, dict):
+        return False, "GO file is not a JSON object"
+    if str(go.get("campaign", "")) != str(campaign):
+        return False, "GO campaign mismatch"
+    if not str(go.get("approved_by", "")).strip():
+        return False, "GO approved_by missing"
+    if not str(go.get("created_at", "")).strip():
+        return False, "GO created_at missing"
+    current = _file_sha256(report_path)
+    if current is None:
+        return False, "calibration report missing"
+    if str(go.get("calibration_report_sha256", "")) != current:
+        return False, "GO report hash stale/mismatch"
+    return True, "ok"
+
+
+import contextlib as _ctxlib
+import fcntl as _fcntl
+
+
+@_ctxlib.contextmanager
+def _ledger_lock(path: str):
+    """Exclusive file lock so concurrent invocations cannot interleave (G3)."""
+    lock_path = (path or "ledger") + ".lock"
+    d = os.path.dirname(lock_path)
+    if d:
+        os.makedirs(d, exist_ok=True)
+    with open(lock_path, "a+", encoding="utf-8") as lf:
+        _fcntl.flock(lf.fileno(), _fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            _fcntl.flock(lf.fileno(), _fcntl.LOCK_UN)
+
+
+def _ledger_entries(path: str) -> list:
+    """All ledger records. Any unparseable non-empty line is fatal (G3)."""
+    if not path or not os.path.exists(path):
+        return []
+    entries = []
+    with open(path, encoding="utf-8") as f:
+        for i, line in enumerate(f, 1):
+            if not line.strip():
+                continue
+            try:
+                entries.append(json.loads(line))
+            except Exception as e:
+                raise RuntimeError(
+                    f"spend ledger corrupt at {path}:{i}: unparseable line; "
+                    f"refusing to continue (fix or archive the ledger): {e}") from e
+    return entries
+
+
 def _ledger_total(path: str) -> float:
     if not path or not os.path.exists(path):
         return 0.0
-    total = 0.0
-    with open(path, encoding="utf-8") as f:
-        for line in f:
-            line = line.strip()
-            if not line:
-                continue
-            try:
-                rec = json.loads(line)
-                total += float(rec.get("cost_inr") or 0)
-            except Exception:
-                continue
-    return float(total)
+    with _ledger_lock(path):
+        return float(sum(float(r.get("cost_inr") or 0) for r in _ledger_entries(path)))
 
 
-def _append_ledger(path: str, row: dict, campaign: str = ""):
-    """Append one completed game's spend (F1). Never rewrites history."""
+def _append_ledger(path: str, row: dict, campaign: str = "", status: str = "kept"):
+    """Append one completed game's spend (F1/G5). Never rewrites history.
+
+    A billed game that is re-run after an interrupted trio is real spend
+    twice: both entries stay, the discarded partial is status=discarded
+    and the kept re-run is status=kept with a higher attempt number.
+    """
     if not path:
         return
     billed = row.get("billed_cost_inr")
@@ -752,23 +828,31 @@ def _append_ledger(path: str, row: dict, campaign: str = ""):
     except Exception:
         billed_f = 0.0
     used_fallback = billed_f <= 0
-    rec = {
-        "ts": datetime.now(timezone.utc).isoformat(),
-        "run_tag": row.get("run_tag", ""),
-        "campaign": campaign or row.get("campaign", ""),
-        "requested_seed": row.get("requested_seed"),
-        "arm": row.get("arm"),
-        "game_id": row.get("game_id", ""),
-        "billed_cost_inr": billed_f,
-        "est_cost_inr": row.get("est_cost_inr"),
-        "cost_inr": _effective_cost(row),
-        "cost_fallback_est": bool(used_fallback),
-    }
+    camp = campaign or row.get("campaign", "")
     d = os.path.dirname(path)
     if d:
         os.makedirs(d, exist_ok=True)
-    with open(path, "a", encoding="utf-8") as f:
-        f.write(json.dumps(rec) + "\n")
+    with _ledger_lock(path):
+        prior = [r for r in _ledger_entries(path)
+                 if r.get("campaign") == camp
+                 and r.get("requested_seed") == row.get("requested_seed")
+                 and r.get("arm") == row.get("arm")]
+        rec = {
+            "ts": datetime.now(timezone.utc).isoformat(),
+            "run_tag": row.get("run_tag", ""),
+            "campaign": camp,
+            "requested_seed": row.get("requested_seed"),
+            "arm": row.get("arm"),
+            "game_id": row.get("game_id", ""),
+            "billed_cost_inr": billed_f,
+            "est_cost_inr": row.get("est_cost_inr"),
+            "cost_inr": _effective_cost(row),
+            "cost_fallback_est": bool(used_fallback),
+            "status": status,
+            "attempt": len(prior) + 1,
+        }
+        with open(path, "a", encoding="utf-8") as f:
+            f.write(json.dumps(rec) + "\n")
 
 
 def _load_pending(path: str) -> list:
@@ -833,9 +917,57 @@ def _completed_keys(out_path: str, campaign: str = "") -> set:
     return keys
 
 
-def _calibration_report(rows, votes_rows, trust_rows) -> dict:
-    """Nuisance-only calibration summary (F26). No arm outcomes, ever."""
+CALIBRATION_KEYS = {
+    "n_games", "n_discarded_games", "discarded_spend_inr", "kept_spend_inr",
+    "cost_per_arm_inr", "mean_cost_per_game_inr", "json_failures_per_game",
+    "json_per_arm", "mean_days", "mean_days_per_arm",
+    "within_seed_days_correlation", "cotx3_nonunanimity_share",
+    "cotx3_votes_with_samples", "probe_missingness_by_arm",
+    "probe_cost_per_game_inr",
+}
+
+
+def _probe_cost_from_raw(raw_root: str, n_games: int):
+    """Probe cost per game from purpose=probe raw rows (G2)."""
+    if not raw_root or not n_games:
+        return None
+    total, found = 0.0, False
+    for dirpath, _dirs, files in os.walk(raw_root):
+        for name in files:
+            if name != "llm_raw.jsonl":
+                continue
+            with open(os.path.join(dirpath, name), encoding="utf-8") as f:
+                for line in f:
+                    try:
+                        rec = json.loads(line)
+                    except Exception:
+                        continue
+                    if rec.get("purpose") == "probe":
+                        total += float(rec.get("cost_inr") or 0)
+                        found = True
+    return round(total / n_games, 6) if found else None
+
+
+def _projected_trio_cost(kept_rows, planned_trio_cost: float) -> float:
+    """max(planned, mean measured kept trio cost so far) (G4)."""
+    seeds = {}
+    for r in kept_rows or []:
+        if r.get("ledger_status") == "discarded":
+            continue
+        seeds.setdefault(r.get("requested_seed"), 0.0)
+        seeds[r.get("requested_seed")] += _effective_cost(r)
+    if not seeds:
+        return float(planned_trio_cost)
+    mean_trio = sum(seeds.values()) / len(seeds)
+    return max(float(planned_trio_cost), float(mean_trio))
+
+
+def _calibration_report(rows, votes_rows, trust_rows,
+                        probe_cost_per_game=None) -> dict:
+    """Nuisance-only calibration summary (F26/V8). No arm outcomes, ever."""
     import numpy as _np
+    discarded = [r for r in rows if r.get("ledger_status") == "discarded"]
+    rows = [r for r in rows if r.get("ledger_status") != "discarded"]
     by_arm_cost, by_arm_days, by_arm_json = {}, {}, {}
     for r in rows:
         arm = str(r.get("arm", ""))
@@ -884,6 +1016,9 @@ def _calibration_report(rows, votes_rows, trust_rows) -> dict:
         probe_miss[arm] = (tot + 1, miss + (1 if t.get("parse_fail") else 0))
     return {
         "n_games": len(rows),
+        "n_discarded_games": len(discarded),
+        "discarded_spend_inr": round(float(sum(_effective_cost(r) for r in discarded)), 4),
+        "kept_spend_inr": round(float(sum(_effective_cost(r) for r in rows)), 4),
         "cost_per_arm_inr": {k: round(float(sum(v)), 4) for k, v in by_arm_cost.items()},
         "mean_cost_per_game_inr": {k: round(float(sum(v) / len(v)), 4)
                                    for k, v in by_arm_cost.items() if v},
@@ -898,8 +1033,7 @@ def _calibration_report(rows, votes_rows, trust_rows) -> dict:
         "probe_missingness_by_arm": {k: {"missing": m, "total": t,
                                          "rate": (m / t if t else None)}
                                      for k, (t, m) in probe_miss.items()},
-        "probe_cost_per_game_inr": None,
-        "probe_cost_note": "not separable from game billed cost; see cost_per_arm_inr",
+        "probe_cost_per_game_inr": probe_cost_per_game,
     }
 
 
@@ -984,11 +1118,14 @@ def _run_task_once(task: dict) -> dict:
 
 def _record_result(result: dict, args, run_dir: str, rows: list,
                    canonical: bool = True, ledger_path: str = None,
-                   campaign: str = ""):
+                   campaign: str = "", status: str = None):
     row = result["row"]
+    if status is None:
+        status = "kept" if canonical else "discarded"
+    row["ledger_status"] = status
     rows.append(row)
     if ledger_path:
-        _append_ledger(ledger_path, row, campaign=campaign)
+        _append_ledger(ledger_path, row, campaign=campaign, status=status)
     gdf = pd.DataFrame([row])
     _upsert(os.path.join(run_dir, "games.parquet"), gdf, ["run_tag", "game_id"])
     is_team = str(row.get("design", "")) == "team"
@@ -1114,6 +1251,10 @@ def main():
                     help="pending trios file (default logs/pending_trios.json)")
     ap.add_argument("--calibration-go", type=str, default=None,
                     help="human GO file required past calibration (default logs/calibration_go.json)")
+    ap.add_argument("--calibration-report", type=str, default=None,
+                    help="canonical calibration report the GO binds to (default logs/calibration_report.json)")
+    ap.add_argument("--planned-trio-cost", type=float, default=8.13,
+                    help="assumed Rs. per trio for in-flight projection (G4)")
     ap.add_argument("--confirmatory", action="store_true",
                     help="enforce pre-registration checks before starting")
     ap.add_argument("--no-canonical", action="store_true",
