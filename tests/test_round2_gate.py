@@ -34,22 +34,59 @@ class TestFreezeBlockG9(unittest.TestCase):
 
 
 class TestRunpathG10(unittest.TestCase):
+    def _resolve(self, root, current, mod, level):
+        """Resolve an import to candidate files (package or module)."""
+        if level:
+            base = os.path.dirname(current)
+            for _ in range(level - 1):
+                base = os.path.dirname(base)
+            stem = os.path.join(base, *([mod] if mod else []))
+        else:
+            parts = mod.split(".")
+            if parts and parts[0] == "src":
+                parts = parts[1:]
+            stem = os.path.join(root, *parts)
+        cands = [stem + ".py", os.path.join(stem, "__init__.py")]
+        return [c for c in cands if os.path.exists(c)]
+
+    def _closure(self, root, entry):
+        seen, todo = set(), [entry]
+        while todo:
+            cur = todo.pop()
+            if cur in seen:
+                continue
+            seen.add(cur)
+            with open(cur, encoding="utf-8") as f:
+                tree = ast.parse(f.read())
+            for node in ast.walk(tree):
+                mods = []
+                if isinstance(node, ast.Import):
+                    mods = [(a.name, 0) for a in node.names]
+                elif isinstance(node, ast.ImportFrom):
+                    if node.module:
+                        mods.append((node.module, node.level))
+                    for a in node.names:
+                        sub = (node.module + "." + a.name) if node.module \
+                            else a.name
+                        mods.append((sub, node.level))
+                for mod, level in mods:
+                    if not level and not mod.startswith("src"):
+                        continue
+                    todo.extend(self._resolve(root, cur, mod, level))
+        return seen
+
     def test_import_closure_is_hashed(self):
         root = os.path.normpath(os.path.join(os.path.dirname(run_arena.__file__), ".."))
         hashed = {os.path.relpath(p, root).replace(os.sep, "/")
                   for p in run_arena._runpath_files()}
         entry = os.path.join(root, "eval", "run_arena.py")
-        with open(entry, encoding="utf-8") as f:
-            tree = ast.parse(f.read())
-        mods = set()
-        for node in ast.walk(tree):
-            if isinstance(node, ast.ImportFrom) and node.module:
-                mods.add(node.module)
-            elif isinstance(node, ast.Import):
-                mods.update(a.name for a in node.names)
-        for mod in sorted(m for m in mods if m.startswith("src.")):
-            rel = mod[len("src."):].replace(".", "/") + ".py"
-            self.assertIn(rel, hashed, mod)
+        for path in sorted(self._closure(root, entry)):
+            rel = os.path.relpath(path, root).replace(os.sep, "/")
+            if os.path.basename(path) == "__init__.py" and os.path.getsize(path) == 0:
+                # An empty package init cannot alter behaviour; if it gains
+                # content it must be added to the run path.
+                continue
+            self.assertIn(rel, hashed, rel)
 
     def test_new_subpackage_module_changes_hash(self):
         sub = os.path.join(os.path.dirname(run_arena.__file__), "..",
