@@ -6,11 +6,11 @@ from unittest.mock import patch
 from src import llm_client
 
 
-def _fake_chat_text(system, user, temperature=None, log=True, response_format=None):
+def _fake_chat_text(system, user, temperature=None, log=True, response_format=None, **kw):
     return "I am watching the discussion."
 
 
-def _fake_chat_json_cite_future(system, user, meta=None, temperature=None):
+def _fake_chat_json_cite_future(system, user, meta=None, temperature=None, **kw):
     if meta is not None:
         meta.update({"parse_fail": False, "repaired": False, "empty_raw": False, "error": None, "raw_len": 1})
     if "imaginative mind" in system:
@@ -28,7 +28,7 @@ def _fake_chat_json_cite_future(system, user, meta=None, temperature=None):
     return {"vote": "1", "reason": "suspect"}
 
 
-def _fake_chat_json(system, user, meta=None, temperature=None):
+def _fake_chat_json(system, user, meta=None, temperature=None, **kw):
     if meta is not None:
         meta.update({"parse_fail": False, "repaired": False, "empty_raw": False, "error": None, "raw_len": 1})
     if "imaginative mind" in system:
@@ -120,7 +120,7 @@ class TestProbeFields(unittest.TestCase):
         from src.eval import run_arena
         from src.eval.run_arena import play_one
 
-        def fail_probe(system, user, meta=None, temperature=None):
+        def fail_probe(system, user, meta=None, temperature=None, **kw):
             if "Output trust scores" in system:
                 if meta is not None:
                     meta.update({"parse_fail": True})
@@ -142,7 +142,7 @@ class TestProbeFields(unittest.TestCase):
     def test_probe_drops_dead_or_hallucinated_targets(self):
         from src.agents.baselines import CotAgent
 
-        def fake(system, user, meta=None, temperature=None):
+        def fake(system, user, meta=None, temperature=None, **kw):
             if meta is not None:
                 meta.update({"parse_fail": False})
             return {"trust": {"0": 0.2, "1": 0.9, "6": 0.1, "99": 0.5}}
@@ -159,7 +159,7 @@ class TestCotX3ParseCounts(unittest.TestCase):
         votes = [None, "4", "4"]
         state = {"n": 0}
 
-        def fake(system, user, meta=None, temperature=None):
+        def fake(system, user, meta=None, temperature=None, **kw):
             v = votes[state["n"]]
             state["n"] += 1
             if meta is not None:

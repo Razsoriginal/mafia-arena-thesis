@@ -63,10 +63,10 @@ class TestTeamAssignment(unittest.TestCase):
         from src.eval import run_arena
         from src.eval.run_arena import play_one
 
-        def fake_text(system, user, temperature=None, log=True, response_format=None):
+        def fake_text(system, user, temperature=None, log=True, response_format=None, **kw):
             return "I am watching the discussion."
 
-        def fake_json(system, user, meta=None, temperature=None):
+        def fake_json(system, user, meta=None, temperature=None, **kw):
             if meta is not None:
                 meta.update({"parse_fail": False})
             if "imaginative mind" in system:

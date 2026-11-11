@@ -5,11 +5,11 @@ from unittest.mock import patch
 from src import llm_client
 
 
-def _fake_chat_text(system, user, temperature=None, log=True, response_format=None):
+def _fake_chat_text(system, user, temperature=None, log=True, response_format=None, **kw):
     return "I am watching the discussion."
 
 
-def _fake_chat_json(system, user, meta=None, temperature=None):
+def _fake_chat_json(system, user, meta=None, temperature=None, **kw):
     if meta is not None:
         meta.update({"parse_fail": False, "repaired": False, "empty_raw": False, "error": None, "raw_len": 1})
     if "imaginative mind" in system:

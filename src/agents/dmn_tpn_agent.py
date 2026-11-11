@@ -18,7 +18,7 @@ class DmnTpnAgent(BaseAgent):
 
     def speak(self, role, history):
         # Speak from the verification-corrected plan cached by reason().
-        return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history, plan=self._plan))
+        return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history, plan=self._plan), purpose="speak")
 
     def reason(self, role, history, facts, alive, prev_majority=None, alive_roles=None):
         self._alive = list(alive)
@@ -27,7 +27,7 @@ class DmnTpnAgent(BaseAgent):
         dmn = llm.chat_json(
             P.DMN_SYSTEM if use_exf else P.DMN_NO_EXFORMATION_SYSTEM,
             P.dmn_user(self.pid, role, history, alive, exformation=use_exf),
-            meta=dmn_meta)
+            meta=dmn_meta, purpose="dmn_reason")
         conf_by_suspect = {}
         if "tpn" in self.ablate:
             tpn = {}
@@ -39,7 +39,7 @@ class DmnTpnAgent(BaseAgent):
                     pass
         else:
             tpn = llm.chat_json(P.TPN_SYSTEM, P.tpn_user(dmn.get("hypotheses", []), facts),
-                                meta=tpn_meta)
+                                meta=tpn_meta, purpose="tpn_reason")
             for v in tpn.get("verified", []):
                 try:
                     conf_by_suspect[str(v["suspect"])] = float(v.get("revised_confidence", 0))
@@ -122,7 +122,7 @@ class DmnTpnAgent(BaseAgent):
         meta = {}
         d = llm.chat_json(P.VOTE_CITED_SYSTEM,
                           P.vote_cited_user(self.pid, role, history, trust), meta=meta,
-                          temperature=settings.vote_temperature)
+                          temperature=settings.vote_temperature, purpose="vote")
         return str(d.get("vote", "no-lynch")), {
             "reason": d.get("reason", ""), "trace": trace, "jev": jev_out,
             "commitment": trace.get("commitment", COMMITMENT),

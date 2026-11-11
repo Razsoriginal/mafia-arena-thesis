@@ -16,7 +16,7 @@ class TestTemperaturePlumbing(unittest.TestCase):
     def test_chat_json_forwards_explicit_temperature(self):
         seen = {}
 
-        def fake_chat_text(system, user, temperature=None, log=True, response_format=None):
+        def fake_chat_text(system, user, temperature=None, log=True, response_format=None, **kw):
             seen["temperature"] = temperature
             return '{"vote": "1"}'
 
@@ -28,7 +28,7 @@ class TestTemperaturePlumbing(unittest.TestCase):
     def test_chat_json_default_is_json_temperature(self):
         seen = {}
 
-        def fake_chat_text(system, user, temperature=None, log=True, response_format=None):
+        def fake_chat_text(system, user, temperature=None, log=True, response_format=None, **kw):
             seen["temperature"] = temperature
             return '{"vote": "1"}'
 
@@ -42,7 +42,7 @@ class TestTemperaturePlumbing(unittest.TestCase):
 
         seen = {}
 
-        def fake_chat_json(system, user, meta=None, temperature=None):
+        def fake_chat_json(system, user, meta=None, temperature=None, **kw):
             seen["temperature"] = temperature
             if meta is not None:
                 meta.update({"parse_fail": False})
@@ -58,7 +58,7 @@ class TestTemperaturePlumbing(unittest.TestCase):
 
         seen = {}
 
-        def fake_chat_json(system, user, meta=None, temperature=None):
+        def fake_chat_json(system, user, meta=None, temperature=None, **kw):
             seen["temperature"] = temperature
             if meta is not None:
                 meta.update({"parse_fail": False})

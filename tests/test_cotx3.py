@@ -5,7 +5,7 @@ from unittest.mock import patch
 def _fake_factory(votes):
     calls = {"n": 0, "temps": []}
 
-    def fake(system, user, meta=None, temperature=None):
+    def fake(system, user, meta=None, temperature=None, **kw):
         calls["temps"].append(temperature)
         v = votes[calls["n"]]
         calls["n"] += 1

@@ -17,7 +17,7 @@ class TestProbe(unittest.TestCase):
 
         seen = {}
 
-        def fake(system, user, meta=None, temperature=None):
+        def fake(system, user, meta=None, temperature=None, **kw):
             seen["temperature"] = temperature
             seen["system"] = system
             if meta is not None:
@@ -35,7 +35,7 @@ class TestProbe(unittest.TestCase):
     def test_probe_on_dmn_agent_same_method(self):
         from src.agents.dmn_tpn_agent import DmnTpnAgent
 
-        def fake(system, user, meta=None, temperature=None):
+        def fake(system, user, meta=None, temperature=None, **kw):
             self.assertEqual(temperature, 0.0)
             if meta is not None:
                 meta.update({"parse_fail": False})
@@ -49,7 +49,7 @@ class TestProbe(unittest.TestCase):
     def test_probe_parse_fail_returns_empty(self):
         from src.agents.baselines import CotAgent
 
-        def fake(system, user, meta=None, temperature=None):
+        def fake(system, user, meta=None, temperature=None, **kw):
             if meta is not None:
                 meta.update({"parse_fail": True})
             return {}

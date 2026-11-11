@@ -20,7 +20,7 @@ class BaseAgent:
         meta = {}
         d = llm.chat_json(P.TRUST_PROBE_SYSTEM,
                           P.trust_probe_user(self.pid, history, alive),
-                          meta=meta, temperature=0.0)
+                          meta=meta, temperature=0.0, purpose="probe")
         raw = d.get("trust", {}) if isinstance(d, dict) else {}
         allowed = {str(a) for a in (alive or []) if str(a) != str(self.pid)}
         trust = {}
@@ -38,7 +38,7 @@ class BaseAgent:
         d = llm.chat_json(
             P.NIGHT_SYSTEM,
             P.night_user(self.pid, role, alive, history, action, options),
-            meta=meta,
+            meta=meta, purpose="night",
         )
         pick = str(d.get(action, ""))
         valid = {str(o) for o in options}

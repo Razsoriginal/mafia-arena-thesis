@@ -39,9 +39,27 @@ def _log_jsonl(name: str, payload: dict):
         pass
 
 
+PURPOSES = {"speak", "dmn_reason", "tpn_reason", "night", "vote",
+            "probe", "repair", "judge"}
+# AiCredits catalog rates (USD/token) + INR/USD, billing markup 1.10.
+# Duplicated from run_arena so per-call estimates do not need an import.
+_MUSE_IN, _MUSE_OUT, _INR_PER_USD, _BILLING_MARKUP = 1e-07, 2e-07, 94.834253, 1.10
+
+
+def _est_cost_inr(prompt_tokens, completion_tokens) -> float:
+    try:
+        return round((int(prompt_tokens or 0) * _MUSE_IN
+                      + int(completion_tokens or 0) * _MUSE_OUT)
+                     * _INR_PER_USD * _BILLING_MARKUP, 6)
+    except Exception:
+        return 0.0
+
+
 def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
              attempt=None, repair: bool = False, escalated: bool = False,
-             realised_model=None):
+             realised_model=None, purpose=None, prompt_tokens=0,
+             completion_tokens=0, cost_inr=0.0, cost_estimated: bool = False,
+             error=None):
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
@@ -57,6 +75,12 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "attempt": attempt,
         "repair": bool(repair),
         "escalated": bool(escalated),
+        "purpose": purpose if purpose in PURPOSES else "speak",
+        "prompt_tokens": int(prompt_tokens or 0),
+        "completion_tokens": int(completion_tokens or 0),
+        "cost_inr": float(cost_inr or 0.0),
+        "cost_estimated": bool(cost_estimated),
+        "error": (str(error)[:300] if error else None),
         "raw": (raw or "")[:4000],
     })
 
@@ -101,18 +125,23 @@ def get_client():
 
 
 def chat_text(system: str, user: str, temperature: float | None = None,
-              log: bool = True, response_format: dict | None = None) -> str:
+              log: bool = True, response_format: dict | None = None,
+              purpose: str | None = None, repair: bool = False) -> str:
+    # `log` is kept for call compatibility only: every attempt always
+    # writes its own raw row (G1). There is no silent log=False path.
     client = get_client()
     temp = settings.temp_dialogue if temperature is None else temperature
     use_format = response_format
     max_tokens = settings.max_tokens
     initial_max_tokens = max_tokens
+    resolved_purpose = "repair" if repair else (purpose or "speak")
     # 5 attempts: long games hit transient connection errors often enough
     # that 3 attempts silently turns a vote into a fallback delay.
     # Retry/repair/escalation behaviour is pilot-consistent and is logged
     # per call (see _log_raw); it is not part of the first-attempt
     # temperature contract. See docs/PREREGISTRATION.md §8.
     for attempt in range(5):
+        escalated = max_tokens != initial_max_tokens
         try:
             kwargs = {
                 "model": settings.model,
@@ -125,32 +154,41 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                 kwargs["response_format"] = use_format
             resp = client.chat.completions.create(**kwargs)
             COST_LOG["calls"] += 1
+            pt = ct = 0
+            billed = None
             try:
-                COST_LOG["prompt_tokens"] += resp.usage.prompt_tokens
-                COST_LOG["completion_tokens"] += resp.usage.completion_tokens
-                # Provider-reported INR charge (includes AiCredits markup).
+                pt = int(resp.usage.prompt_tokens or 0)
+                ct = int(resp.usage.completion_tokens or 0)
+                COST_LOG["prompt_tokens"] += pt
+                COST_LOG["completion_tokens"] += ct
                 billed = getattr(resp.usage, "cost", None)
                 if billed is not None:
                     COST_LOG["cost_inr"] += float(billed)
             except Exception:
                 pass
             realised = getattr(resp, "model", None)
-            escalated = max_tokens != initial_max_tokens
-            reasoning = _reasoning(resp)
-            if reasoning:
-                # Audit only: reasoning is never used as the answer.
-                _log_raw("reasoning", reasoning, temperature=temp,
-                         max_tokens=max_tokens, attempt=attempt,
-                         escalated=escalated, realised_model=realised)
+            if billed is not None:
+                call_cost, cost_est = float(billed), False
+            else:
+                call_cost, cost_est = _est_cost_inr(pt, ct), True
             text = _content(resp)
+            # One raw row per underlying attempt, written even when the
+            # content is empty and the attempt will be retried (G1).
+            _log_raw("chat_text", text, temperature=temp,
+                     max_tokens=max_tokens, attempt=attempt, repair=repair,
+                     escalated=escalated, realised_model=realised,
+                     purpose=resolved_purpose, prompt_tokens=pt,
+                     completion_tokens=ct, cost_inr=call_cost,
+                     cost_estimated=cost_est)
             if not text:
                 raise ValueError(f"empty content (max_tokens={max_tokens})")
-            if log:
-                _log_raw("chat_text", text, temperature=temp,
-                         max_tokens=max_tokens, attempt=attempt,
-                         escalated=escalated, realised_model=realised)
             return text
         except Exception as e:
+            if "empty content" not in str(e):
+                _log_raw("chat_text", "", temperature=temp,
+                         max_tokens=max_tokens, attempt=attempt, repair=repair,
+                         escalated=escalated, realised_model=None,
+                         purpose=resolved_purpose, error=e)
             _log_error("chat_text", e, temperature=temp,
                        max_tokens=max_tokens, attempt=attempt)
             text_err = str(e).lower()
@@ -193,7 +231,8 @@ def _parse_json(raw: str):
 
 
 def chat_json(system: str, user: str, meta: dict | None = None,
-              temperature: float | None = None) -> dict:
+              temperature: float | None = None,
+              purpose: str | None = None) -> dict:
     """JSON mode with one repair pass. Falls back to {} (safe DELAY).
 
     meta receives parse_fail / repaired / empty_raw / error so callers can
@@ -206,11 +245,11 @@ def chat_json(system: str, user: str, meta: dict | None = None,
 
     json_format = {"type": "json_object"}
     first_temp = settings.temp_json if temperature is None else temperature
+    # No wrapper row: the underlying chat_text attempt rows are the audit
+    # record (actual realised model, tokens, cost, purpose) (G1/G2).
     raw = chat_text(system + "\nReply with valid JSON only.", user,
-                    temperature=first_temp,
-                    log=False, response_format=json_format)
-    _log_raw("chat_json", raw, temperature=first_temp,
-             max_tokens=settings.max_tokens, attempt=0)
+                    temperature=first_temp, response_format=json_format,
+                    purpose=purpose)
     if meta is not None:
         meta["raw_len"] = len(raw)
     if not raw.strip():
@@ -232,10 +271,8 @@ def chat_json(system: str, user: str, meta: dict | None = None,
     # failed first attempt, logged with repair=True, not a fresh
     # vote-sample; see PREREGISTRATION.md §8 amendment.
     COST_LOG["repairs"] = COST_LOG.get("repairs", 0) + 1
-    fix = chat_text(fix_system, fix_user, temperature=0.0, log=False,
-                    response_format=json_format)
-    _log_raw("chat_json_repair", fix, temperature=0.0,
-             max_tokens=settings.max_tokens, attempt=1, repair=True)
+    fix = chat_text(fix_system, fix_user, temperature=0.0,
+                    response_format=json_format, purpose="repair", repair=True)
     parsed = _parse_json(fix)
     if parsed is not None:
         if meta is not None:
