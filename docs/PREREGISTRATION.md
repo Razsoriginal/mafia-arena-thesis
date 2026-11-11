@@ -5,9 +5,19 @@
 **Branch at writing:** `prereg-mvp`
 **Starting sha:** `305e9898547be3af621006f1e1c66fc687235dda`
 
+<!-- freeze
 prompts_sha256: d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc
-freeze_git_sha: PENDING
 runpath_sha256: PENDING
+freeze_git_sha: PENDING
+freeze_tag: PENDING
+-->
+
+The block above is the machine-readable freeze identity (§8). `run_arena.py`
+parses it, refuses confirmatory runs unless every field is present and valid,
+and refuses unless the recorded `prompts_sha256` and `runpath_sha256` match the
+current tree and `freeze_tag` is an ancestor of HEAD. `runpath_sha256` and
+`freeze_git_sha`/`freeze_tag` are filled by the approved freeze step; until
+then they are `PENDING` and every confirmatory run is refused.
 
 Figures are tagged **measured**, **derived**, or **assumed**.
 
@@ -89,12 +99,12 @@ Null claim wording: "Against the same fixed CoT mafia, a village voting uniforml
 
 Vote-temperature amendment: every vote-sample call in every arm runs at 0.7 on its first attempt, including the DMN cited vote. DMN and TPN reasoning, night actions, and the probe run at 0.0. CoT-x3 takes 3 samples at 0.7 and uses majority voting. If all counted samples differ, the first valid sample stands (amended wording, F38). Its extra samples do not re-sample after a tie.
 
-Retry amendment (F4/F5, judgement call): the pilot-consistent retry, JSON-repair (at 0.0) and empty-content token-escalation behaviour is kept. The 0.7 contract applies to first-attempt samples; retries, repairs and escalations are logged per call (temperature, max_tokens, attempt, repair/escalated flags, requested vs realised model) and their rates are reported by arm. The alternative — disabling them in confirmatory mode — was rejected to stay comparable with the pilot. `days` in game rows is the day count (a first-day game is 1, a 5-day cap is 5); pilot parquet stored the zero-based last-day index, so pilot lengths need +1 to compare. Freeze identity is the freeze tag plus `runpath_sha256` over the run path (`src/agents`, `src/mafia`, `src/llm_client.py`, `src/config.py`, `src/eval/run_arena.py`); analysis-only files are excluded.
+Retry amendment (F4/F5, judgement call): the pilot-consistent retry, JSON-repair (at 0.0) and empty-content token-escalation behaviour is kept. The 0.7 contract applies to first-attempt samples; retries, repairs and escalations are logged per call (temperature, max_tokens, attempt, repair/escalated flags, requested vs realised model) and their rates are reported by arm. Every underlying attempt writes its own raw row with prompt/completion tokens, billed (or flagged estimated) cost, and a purpose tag. The alternative — disabling them in confirmatory mode — was rejected to stay comparable with the pilot. `days` in game rows is the day count (a first-day game is 1, a 5-day cap is 5); pilot parquet stored the zero-based last-day index, so pilot lengths need +1 to compare. Freeze identity is the machine-readable freeze block at the top of this document: `prompts_sha256`, `runpath_sha256` over the run path (`src/agents`, recursive; `src/mafia`, recursive; `src/llm_client.py`; `src/config.py`; `src/eval/run_arena.py`), `freeze_git_sha`, and `freeze_tag`. Confirmatory mode requires the freeze tag's commit to be an ancestor of HEAD and `runpath_sha256` to match the current tree; analysis-only files are excluded. The full dirty-tree check is scoped to the same run-path files plus this document, so run artifacts under `logs/` never block a run.
 
 Speak and dialogue run at 0.3 in every arm. All other frozen parameters are:
 
 - Backbone `meta/muse-spark-1.3-contributor` through AiCredits. A realised model-string change stops the confirmatory set.
-- `TAU_DELAY = 0.35`, passed explicitly as `--tau 0.35`, because the code default is 0.65. This is a **judgement call** frozen from the pilot sweep. The alternative 0.45 is named in Limitations and is not substituted after seeing data.
+- `TAU_DELAY = 0.35`, passed explicitly as `--tau 0.35`, because the code default is 0.65. The CLI requires `--tau` for `--design team`; the effective value is recorded in the manifest. This is a **judgement call** frozen from the pilot sweep. The alternative 0.45 is named in Limitations and is not substituted after seeing data.
 - `EVT_THRESHOLD = 0.6`.
 - Jev threshold 0.6 for the later exploratory Jev cell only.
 - `LLM_MAX_TOKENS = 2500`.
@@ -124,7 +134,7 @@ Calibration go and no-go rules:
 
 No interim efficacy stopping is allowed. Games are run seed-major, as complete trios. Cumulative billed cost is checked after each trio against the usable Rs.1,600. If the cap is exceeded after a completed trio, remaining trios stop. Completed trios are analysed as recorded, expensive and long games are never trimmed, and seeds are never replaced after observing a failure.
 
-Run-path amendment (F1/F2/F16/F17/F19/F26): spend is enforced against an append-only ledger (`logs/spend_ledger.jsonl`, billed with estimate fallback, flagged) across all invocations, smoke and `--no-canonical` included. Confirmatory runs use a fixed `--campaign` with `--start-trio`/`--trios`/`--resume` on the 5000+100·i series; canonical upsert keys on (campaign, requested_seed, arm), a trio reaches canonical only when complete, and a 402 or second worker failure marks it pending (`logs/pending_trios.json`) with partial output in the run bundle only and spend still ledgered. `--calibration --trios 20` writes a nuisance-only `calibration_report.json` (cost, JSON rate, length, probe missingness, within-seed length correlation, x3 non-unanimity; never arm outcomes), and continuation past trio 20 refuses to start until a human-created `logs/calibration_go.json` exists. Outcome-by-arm evaluation requires `--unblind` and is refused while trios are pending.
+Run-path amendment (F1/F2/F16/F17/F19/F26): spend is enforced against an append-only ledger (`logs/spend_ledger.jsonl`, billed with estimate fallback, flagged) across all invocations, smoke and `--no-canonical` included. A corrupt (unparseable, non-empty) ledger line stops the run; appends take an exclusive file lock. Each ledger entry records `status` (`kept` for a completed trio's games, `discarded` for a partial trio's games that will be re-run) and an `attempt` counter; both runs are real spend and neither is deduplicated, while per-game cost statistics use kept rows only and discarded spend is reported separately. Before each trio starts, `ledger_total + projected_trio_cost` must fit the cap, where projected is `max(--planned-trio-cost (default Rs.8.13), mean measured kept trio cost so far)`; the post-trio cap check is retained. Confirmatory runs use a fixed `--campaign` with `--start-trio`/`--trios`/`--resume` on the 5000+100·i series; canonical upsert keys on (campaign, requested_seed, arm) for games and include campaign in vote and trust keys, a trio reaches canonical only when complete, and a 402 or second worker failure marks it pending (`logs/pending_trios.json`) with partial output in the run bundle only and spend still ledgered. `--calibration --trios 20` writes a nuisance-only `calibration_report.json` (cost, JSON rate, length, probe missingness, within-seed length correlation, x3 non-unanimity, probe cost from `purpose=probe` rows; never arm outcomes). Continuation past trio 20 refuses to start until a valid human GO exists at `logs/calibration_go.json`, independent of any flag. The GO is JSON with `campaign`, `calibration_report_sha256` (sha256 of the current report file), `created_at`, and `approved_by`; a missing, empty, unparseable, other-campaign, or stale-report GO refuses. `--calibration` only controls end-of-run report writing; it never bypasses the pause. Outcome-by-arm evaluation requires `--unblind` and is refused while trios are pending.
 
 Calibration games count towards the confirmatory set only if the calibration decision is GO with no code, prompt, temperature, model, or protocol change. If a change occurs, they are excluded and the seed list restarts. This is a **judgement call**; the alternative is to always exclude the calibration batch and spend its cost as burn-in.
 

@@ -111,21 +111,70 @@ def _prompt_hash() -> str:
 
 
 def _runpath_files():
-    """Files whose change alters what a game does (freeze identity, F9).
+    """Files whose change alters what a game does (freeze identity, G10).
 
-    Analysis-only files (evaluate/stats/judge/dashboard/tests) are
-    excluded so analysis commits do not force a re-freeze.
+    Recursive under src/agents and src/mafia so a new submodule is
+    hashed. Analysis-only files (evaluate/stats/judge/dashboard/tests)
+    are excluded so analysis commits do not force a re-freeze.
     """
     root = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
     rels = []
     for sub in ("agents", "mafia"):
         d = os.path.join(root, sub)
-        if os.path.isdir(d):
-            for name in sorted(os.listdir(d)):
+        for dirpath, _dirs, files in os.walk(d):
+            for name in sorted(files):
                 if name.endswith(".py"):
-                    rels.append(os.path.join(sub, name))
+                    rels.append(os.path.relpath(os.path.join(dirpath, name), root))
     rels += ["llm_client.py", "config.py", os.path.join("eval", "run_arena.py")]
-    return [os.path.join(root, r) for r in rels]
+    return [os.path.join(root, r) for r in sorted(rels)]
+
+
+def _runpath_relpaths():
+    root = os.path.normpath(os.path.join(os.path.dirname(__file__), ".."))
+    return [os.path.relpath(p, os.path.join(root, "..")).replace(os.sep, "/")
+            for p in _runpath_files()]
+
+
+def _git_status_summary() -> dict:
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"], text=True)
+        lines = [x for x in out.splitlines() if x.strip()]
+        return {"n_dirty": len(lines), "entries": lines[:50]}
+    except Exception as e:
+        return {"n_dirty": None, "entries": [], "error": str(e)}
+
+
+def _dirty_runpath_files() -> list:
+    """Dirty files inside the freeze scope only (G6).
+
+    Run artifacts under logs/ never block; an edit to a run-path file
+    or to the pre-registration does.
+    """
+    scope = set(_runpath_relpaths()) | {"docs/PREREGISTRATION.md"}
+    dirty = []
+    try:
+        out = subprocess.check_output(
+            ["git", "status", "--porcelain"], text=True)
+    except Exception:
+        return dirty
+    for line in out.splitlines():
+        if not line.strip():
+            continue
+        path = line[3:].strip().split(" -> ")[-1]
+        if path in scope:
+            dirty.append(path)
+    return dirty
+
+
+def _freeze_tag_ancestor(tag: str) -> bool:
+    if not tag:
+        return False
+    try:
+        r = subprocess.run(["git", "merge-base", "--is-ancestor", tag, "HEAD"])
+        return r.returncode == 0
+    except Exception:
+        return False
 
 
 def _runpath_sha256() -> str:
@@ -145,15 +194,6 @@ def _runpath_sha256() -> str:
     return h.hexdigest()
 
 
-def _is_dirty() -> bool:
-    try:
-        out = subprocess.check_output(
-            ["git", "status", "--porcelain"], text=True).strip()
-        return bool(out)
-    except Exception:
-        return False
-
-
 def _prereg_expected():
     path = os.path.join(os.path.dirname(__file__), "..", "..", "docs", "PREREGISTRATION.md")
     path = os.path.normpath(path)
@@ -165,19 +205,47 @@ def _prereg_expected():
             text = f.read()
     except Exception:
         return out
-    import re as _re
-    m = _re.search(r"prompts_sha256:\s*([0-9a-f]{64})", text)
-    if m:
-        out["prompt_hash"] = m.group(1)
-    m = _re.search(r"freeze_git_sha:\s*([0-9a-f]{7,40})", text)
-    if m:
-        out["git_sha"] = m.group(1)
-    m = _re.search(r"runpath_sha256:\s*([0-9a-f]{64})", text)
-    if m:
-        out["runpath_sha256"] = m.group(1)
-    out["has_pending"] = "PENDING" in text
+    out["freeze"] = _parse_freeze_block(text)
+    out["has_pending"] = not out["freeze"]["valid"]
+    fh = out["freeze"]["fields"]
+    if fh.get("prompts_sha256"):
+        out["prompt_hash"] = fh["prompts_sha256"]
+    if fh.get("runpath_sha256"):
+        out["runpath_sha256"] = fh["runpath_sha256"]
+    if fh.get("freeze_git_sha"):
+        out["git_sha"] = fh["freeze_git_sha"]
     out["raw_text"] = text
     return out
+
+
+def _parse_freeze_block(text: str) -> dict:
+    """Machine-readable freeze block (G9). No substring PENDING check.
+
+    Expected, between <!-- freeze and --> lines, one key per line:
+    prompts_sha256 / runpath_sha256 (64 hex), freeze_git_sha (hex),
+    freeze_tag (non-empty). Blank, missing or malformed all refuse.
+    """
+    import re as _re
+    fields, errors = {}, []
+    m = _re.search(r"<!--\s*freeze(.*?)-->", text or "", _re.S)
+    body = m.group(1) if m else ""
+    for line in body.splitlines():
+        if ":" in line:
+            k, v = line.split(":", 1)
+            fields[k.strip()] = v.strip()
+    def need(key, pat, label):
+        v = fields.get(key, "")
+        if not v:
+            errors.append(f"freeze {label} missing/blank")
+        elif not _re.fullmatch(pat, v):
+            errors.append(f"freeze {label} malformed")
+    need("prompts_sha256", r"[0-9a-f]{64}", "prompts_sha256")
+    need("runpath_sha256", r"[0-9a-f]{64}", "runpath_sha256")
+    need("freeze_git_sha", r"[0-9a-f]{7,40}", "freeze_git_sha")
+    tag = fields.get("freeze_tag", "")
+    if not tag or tag.upper() == "PENDING":
+        errors.append("freeze freeze_tag missing/blank")
+    return {"fields": fields, "valid": not errors, "errors": errors}
 
 
 def _assert_confirmatory(args):
@@ -237,19 +305,26 @@ def _assert_confirmatory(args):
         errors.append(f"vote_temperature {settings.vote_temperature} != {PREREG_VOTE_TEMPERATURE}")
     if float(settings.evt_threshold) != PREREG_EVT_THRESHOLD:
         errors.append(f"EVT_THRESHOLD {settings.evt_threshold} != {PREREG_EVT_THRESHOLD} (F25)")
-    if getattr(args, "_skip_dirty_check", False) is not True and _is_dirty():
-        errors.append("confirmatory requires a clean working tree (F9)")
+    # Scoped dirty check (G6): logs/ artifacts never block; run-path
+    # or pre-registration edits do. Freeze identity is the tag ancestor
+    # plus runpath hash, not HEAD equality.
+    if getattr(args, "_skip_dirty_check", False) is not True:
+        dirty_scope = _dirty_runpath_files()
+        if dirty_scope:
+            errors.append(f"confirmatory requires clean run-path files: {dirty_scope} (G6)")
     expected = _prereg_expected()
-    if expected.get("has_pending"):
-        errors.append("confirmatory refused while pre-registration freeze is PENDING (F8)")
-    if "prompt_hash" in expected and _prompt_hash() != expected["prompt_hash"]:
-        errors.append("prompt hash differs from pre-registration")
-    if "runpath_sha256" in expected and _runpath_sha256() != expected["runpath_sha256"]:
-        errors.append("runpath hash differs from pre-registration freeze (F9)")
-    if "git_sha" in expected and _git_sha() not in (expected["git_sha"],):
-        # allow full vs short prefix match
-        if not expected["git_sha"].startswith(_git_sha()) and not _git_sha().startswith(expected["git_sha"][:7]):
-            errors.append("git sha differs from pre-registration freeze")
+    freeze = expected.get("freeze") or {}
+    if not freeze.get("valid"):
+        errors.append("confirmatory refused: freeze block invalid: "
+                      + "; ".join(freeze.get("errors", ["missing"])) + " (G9)")
+    else:
+        fields = freeze["fields"]
+        if _prompt_hash() != fields.get("prompts_sha256"):
+            errors.append("prompt hash differs from pre-registration")
+        if _runpath_sha256() != fields.get("runpath_sha256"):
+            errors.append("runpath hash differs from pre-registration freeze (G6)")
+        if not _freeze_tag_ancestor(fields.get("freeze_tag", "")):
+            errors.append("freeze tag is not an ancestor of HEAD (G6)")
     if errors:
         raise SystemExit("Confirmatory pre-registration check failed: " + "; ".join(errors))
 
@@ -273,6 +348,10 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
         "trios": getattr(args, "trios", None),
         "spend_ledger": _ledger_path(args),
         "budget_cap_inr": getattr(args, "budget_cap", 1600.0),
+        "planned_trio_cost_inr": getattr(args, "planned_trio_cost", 8.13),
+        "effective_tau": getattr(args, "tau", None) if getattr(args, "tau", None) is not None else settings.tau_delay,
+        "git_status_summary": _git_status_summary(),
+        "dirty_runpath": _dirty_runpath_files(),
         "calibration_trios": getattr(args, "calibration_trios", 20),
         "confirmatory": bool(getattr(args, "confirmatory", False)),
         "llm": {
@@ -1261,6 +1340,8 @@ def main():
                     help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
     args = ap.parse_args()
+    if getattr(args, "design", None) == "team" and getattr(args, "tau", None) is None:
+        ap.error("--tau is required for --design team (G11): pass --tau 0.35 explicitly")
     if args.tau is not None:
         settings.tau_delay = args.tau
     ablations = sorted({x.strip() for x in args.ablate.split(",") if x.strip()})
@@ -1281,12 +1362,17 @@ def main():
     ledger_path = _ledger_path(args)
     pending_path = _pending_path(args)
     go_path = _calibration_go_path(args)
-    # Calibration continuation gate (F26): past trio 20 needs a human GO.
-    if getattr(args, "confirmatory", False) and not getattr(args, "calibration", False):
-        if int(getattr(args, "start_trio", 0) or 0) >= CALIBRATION_TRIOS and not os.path.exists(go_path):
-            raise SystemExit(
-                f"Confirmatory continuation refused: {go_path} missing. "
-                "Create it after reviewing calibration_report.json.")
+    report_path = _calibration_report_path(args)
+    # Calibration gate (G7): campaign state, not flags. Any trio index
+    # at or beyond 20 needs a valid GO, whatever flags were passed.
+    if getattr(args, "design", None) == "team":
+        if int(getattr(args, "start_trio", 0) or 0) >= CALIBRATION_TRIOS:
+            ok, reason = _validate_calibration_go(go_path, campaign, report_path)
+            if not ok:
+                raise SystemExit(
+                    f"Continuation refused at trio {args.start_trio}: {reason}. "
+                    f"GO must be JSON with campaign, calibration_report_sha256, "
+                    f"created_at and approved_by in {go_path}.")
     if (_ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0))
             and getattr(args, "budget_cap", None) is not None):
         print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} already exceeded "
@@ -1316,6 +1402,26 @@ def main():
             if aborted:
                 break
             trio_index = start_trio + pos
+            # In-loop calibration gate (G7): index >= 20 needs valid GO.
+            if trio_index >= CALIBRATION_TRIOS:
+                ok, reason = _validate_calibration_go(go_path, campaign, report_path)
+                if not ok:
+                    print(f"[{run_tag}] calibration pause before trio {trio_index}: {reason}.")
+                    break
+            # In-flight projection (G4): never start a trio the cap
+            # cannot cover on projected cost (ledger history + this run).
+            hist = [{"requested_seed": e.get("requested_seed"),
+                     "billed_cost_inr": e.get("cost_inr"),
+                     "ledger_status": e.get("status")}
+                    for e in _ledger_entries(ledger_path)]
+            projected = _projected_trio_cost(hist + rows,
+                                             getattr(args, "planned_trio_cost", 8.13))
+            ledger_now = _ledger_total(ledger_path)
+            if ledger_now + projected > float(getattr(args, "budget_cap", 1600.0)):
+                print(f"[{run_tag}] BUDGET projection Rs.{ledger_now:.2f} + "
+                      f"Rs.{projected:.2f} exceeds cap Rs.{args.budget_cap}; "
+                      "trio not started.")
+                break
             seed0 = trio[0]["requested_seed"] if trio else None
             arm_names = [t["arm"] for t in trio]
             results, billing_hit, failed = [], False, False
@@ -1376,17 +1482,21 @@ def main():
                 print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
                       f"(ledger Rs.{_ledger_total(ledger_path):.2f}); aborting remaining trios.")
                 break
-            if (getattr(args, "confirmatory", False)
-                    and not getattr(args, "calibration", False)
-                    and trio_index + 1 >= CALIBRATION_TRIOS
-                    and not os.path.exists(go_path)):
-                report = _calibration_report(rows, all_votes, all_trust)
-                with open(os.path.join(run_dir, "calibration_report.json"), "w", encoding="utf-8") as f:
-                    json.dump(report, f, indent=2)
-                print(f"[{run_tag}] calibration pause after {trio_index + 1} trios; "
-                      f"report in {run_dir}/calibration_report.json. "
-                      f"Create {go_path} to continue.")
-                break
+            if trio_index + 1 >= CALIBRATION_TRIOS:
+                ok, _reason = _validate_calibration_go(go_path, campaign, report_path)
+                if not ok:
+                    pcost = _probe_cost_from_raw(os.path.join(run_dir, "raw"), len(rows))
+                    report = _calibration_report(rows, all_votes, all_trust,
+                                                 probe_cost_per_game=pcost)
+                    for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
+                        d = os.path.dirname(dest)
+                        if d:
+                            os.makedirs(d, exist_ok=True)
+                        with open(dest, "w", encoding="utf-8") as f:
+                            json.dump(report, f, indent=2)
+                    print(f"[{run_tag}] calibration pause after {trio_index + 1} trios; "
+                          f"report in {report_path}. Create a valid GO in {go_path} to continue.")
+                    break
     elif args.workers > 1 and len(tasks) > 1:
         ex = ProcessPoolExecutor(max_workers=min(args.workers, len(tasks)))
         futures = {ex.submit(_run_task, t): t for t in tasks}
@@ -1422,10 +1532,16 @@ def main():
                            ledger_path=ledger_path, campaign=campaign)
 
     if getattr(args, "calibration", False):
-        report = _calibration_report(rows, all_votes, all_trust)
-        with open(os.path.join(run_dir, "calibration_report.json"), "w", encoding="utf-8") as f:
-            json.dump(report, f, indent=2)
-        print(f"Calibration report (nuisance only): {run_dir}/calibration_report.json")
+        pcost = _probe_cost_from_raw(os.path.join(run_dir, "raw"), len(rows))
+        report = _calibration_report(rows, all_votes, all_trust,
+                                     probe_cost_per_game=pcost)
+        for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
+            d = os.path.dirname(dest)
+            if d:
+                os.makedirs(d, exist_ok=True)
+            with open(dest, "w", encoding="utf-8") as f:
+                json.dump(report, f, indent=2)
+        print(f"Calibration report (nuisance only): {report_path}")
     df = pd.DataFrame(rows)
     if args.no_canonical:
         print(f"\nSaved {len(rows)} rows to {run_dir}/games.parquet (canonical skipped)")

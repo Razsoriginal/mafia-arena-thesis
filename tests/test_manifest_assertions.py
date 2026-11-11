@@ -14,17 +14,29 @@ def _args(**over):
     return type("A", (), base)()
 
 
-def _frozen(run_arena):
-    """Simulate the frozen state: matching hashes, clean tree, no PENDING."""
+def _freeze_text(run_arena, prompts=None, runpath=None, tag="HEAD"):
+    """A real freeze block built from the live tree (V3)."""
+    return ("<!-- freeze\n"
+            f"prompts_sha256: {prompts or run_arena._prompt_hash()}\n"
+            f"runpath_sha256: {runpath or run_arena._runpath_sha256()}\n"
+            f"freeze_git_sha: {run_arena._git_sha()}\n"
+            f"freeze_tag: {tag}\n-->\n")
+
+
+def _frozen(run_arena, prompts=None, runpath=None, tag="HEAD", dirty=None):
+    """Patch only the document location and git-status read.
+
+    The compared hashes and the tag-ancestor check are the real ones, so a
+    tampered field or a non-ancestor tag must still refuse.
+    """
+    text = _freeze_text(run_arena, prompts=prompts, runpath=runpath, tag=tag)
     return patch.multiple(
         run_arena,
         _prereg_expected=lambda: {
-            "prompt_hash": run_arena._prompt_hash(),
-            "runpath_sha256": run_arena._runpath_sha256(),
-            "git_sha": run_arena._git_sha(),
+            "freeze": run_arena._parse_freeze_block(text),
             "has_pending": False,
         },
-        _is_dirty=lambda: False,
+        _dirty_runpath_files=lambda: list(dirty or []),
     )
 
 
@@ -38,20 +50,38 @@ class TestConfirmatoryAssertions(unittest.TestCase):
     def test_pending_freeze_refuses(self):
         from src.eval import run_arena
 
-        with patch.object(run_arena, "_is_dirty", lambda: False), patch.object(
-            run_arena, "_prereg_expected",
-            lambda: {"prompt_hash": run_arena._prompt_hash(), "has_pending": True},
-        ):
+        with _frozen(run_arena, tag="PENDING"):
             with self.assertRaises(SystemExit):
                 run_arena._assert_confirmatory(_args())
 
-    def test_dirty_tree_refuses(self):
+    def test_dirty_runpath_refuses_but_logs_artifact_does_not(self):
         from src.eval import run_arena
 
-        with patch.object(run_arena, "_is_dirty", lambda: True), patch.object(
-            run_arena, "_prereg_expected",
-            lambda: {"prompt_hash": run_arena._prompt_hash(), "has_pending": False},
-        ):
+        with _frozen(run_arena):
+            run_arena._assert_confirmatory(_args())  # clean run path
+        with _frozen(run_arena, dirty=["src/eval/run_arena.py"]):
+            with self.assertRaises(SystemExit):
+                run_arena._assert_confirmatory(_args())
+
+    def test_prompt_hash_mismatch_refuses(self):
+        from src.eval import run_arena
+
+        with _frozen(run_arena, prompts="a" * 64):
+            with self.assertRaises(SystemExit):
+                run_arena._assert_confirmatory(_args())
+
+    def test_runpath_hash_mismatch_refuses(self):
+        from src.eval import run_arena
+
+        with _frozen(run_arena, runpath="b" * 64):
+            with self.assertRaises(SystemExit):
+                run_arena._assert_confirmatory(_args())
+
+    def test_freeze_tag_must_be_ancestor(self):
+        from src.eval import run_arena
+
+        with _frozen(run_arena, tag="no-such-tag-for-g6"):
+            self.assertFalse(run_arena._freeze_tag_ancestor("no-such-tag-for-g6"))
             with self.assertRaises(SystemExit):
                 run_arena._assert_confirmatory(_args())
 
@@ -140,6 +170,9 @@ class TestConfirmatoryAssertions(unittest.TestCase):
         self.assertEqual(m["llm"]["vote_temperature"], 0.7)
         self.assertTrue(m["probe_enabled"])
         self.assertIn("budget_cap_inr", m)
+        self.assertEqual(m["effective_tau"], 0.35)
+        self.assertEqual(m["planned_trio_cost_inr"], 8.13)
+        self.assertIn("git_status_summary", m)
 
 
 if __name__ == "__main__":
