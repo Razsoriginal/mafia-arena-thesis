@@ -533,13 +533,14 @@ def _build_agents(game, focal_pid, focal="dmn_tpn", gate="llm", ablate=None,
 
 def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random",
              night_mode="llm", run_tag="", run_dir="logs/runs/tmp", requested_seed=None,
-             max_days=5, ablate=None, design="focal", arm=None):
+             max_days=5, ablate=None, design="focal", arm=None, campaign=None):
     if design == "team":
         focal_role = "random"
     game, _, focal_pid = _make_game(seed, focal_role)
     run_id = run_id or f"{game.seed}-{arm or focal}"
     requested_seed = seed if requested_seed is None else requested_seed
     game._run_id = run_id
+    campaign = campaign or run_tag
     game._focal_pid = focal_pid
     game._design = design
     game._arm = arm
@@ -640,7 +641,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             cited_turns = sorted({int(m) for m in _TURN_ID.findall(reason)} & valid_turns_at_vote)
             voter_role = game.players[voter].role
             vote_rows.append({
-                "run_tag": run_tag, "game_id": run_id, "day": day, "voter": voter,
+                "run_tag": run_tag, "campaign": campaign, "game_id": run_id, "day": day, "voter": voter,
                 "vote": str(v), "majority_vote": str(maj),
                 "majority_correct": bool(maj_correct), "is_focal": voter == focal_pid,
                 "focal_pid": focal_pid,
@@ -671,7 +672,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             for target, tval in (trust_all.get(_pid, {}) or {}).items():
                 try:
                     is_mafia = game.players[int(target)].role == "mafia"
-                    trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                    trust_rows.append({"run_tag": run_tag, "campaign": campaign, "game_id": run_id, "day": day,
                                        "agent": _pid, "focal_pid": focal_pid,
                                        "target": str(target),
                                        "trust": float(tval), "target_is_mafia": bool(is_mafia),
@@ -696,7 +697,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 try:
                     is_mafia = game.players[int(target)].role == "mafia"
                     if target in (_ptrust or {}):
-                        trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                        trust_rows.append({"run_tag": run_tag, "campaign": campaign, "game_id": run_id, "day": day,
                                            "agent": _pid, "focal_pid": focal_pid,
                                            "target": str(target),
                                            "trust": float(_ptrust[target]),
@@ -708,7 +709,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                                            "verified": False, "elicited": True,
                                            "parse_fail": False})
                     else:
-                        trust_rows.append({"run_tag": run_tag, "game_id": run_id, "day": day,
+                        trust_rows.append({"run_tag": run_tag, "campaign": campaign, "game_id": run_id, "day": day,
                                            "agent": _pid, "focal_pid": focal_pid,
                                            "target": str(target),
                                            "trust": float("nan"),
@@ -1148,6 +1149,7 @@ def _run_task_once(task: dict) -> dict:
         run_dir=task["run_dir"], requested_seed=task["requested_seed"],
         max_days=task["max_days"], ablate=task.get("ablate"),
         design=task.get("design", "focal"), arm=task.get("arm"),
+        campaign=task.get("campaign"),
     )
     dp = COST_LOG["prompt_tokens"] - mark["prompt_tokens"]
     dc = COST_LOG["completion_tokens"] - mark["completion_tokens"]
@@ -1218,7 +1220,7 @@ def _record_result(result: dict, args, run_dir: str, rows: list,
         _upsert(os.path.join(run_dir, "votes.parquet"), vdf,
                 ["run_tag", "game_id", "day", "voter"])
         if canonical and not getattr(args, "no_canonical", False):
-            vkeys = (["game_id", "day", "voter", "arm"] if is_team
+            vkeys = (["campaign", "game_id", "day", "voter"] if is_team
                      else ["run_tag", "game_id", "day", "voter"])
             _upsert(os.path.join(os.path.dirname(args.out) or ".", "votes.parquet"), vdf, vkeys)
     if result["trust"]:
@@ -1228,7 +1230,7 @@ def _record_result(result: dict, args, run_dir: str, rows: list,
             _tkeys = _tkeys + ["trust_source"]
         _upsert(os.path.join(run_dir, "trust.parquet"), tdf, _tkeys)
         if canonical and not getattr(args, "no_canonical", False):
-            tkeys = (["game_id", "day", "agent", "target", "trust_source"]
+            tkeys = (["campaign", "game_id", "day", "agent", "target", "trust_source"]
                      if is_team and "trust_source" in tdf.columns else _tkeys)
             _upsert(os.path.join(os.path.dirname(args.out) or ".", "trust.parquet"), tdf, tkeys)
     print(f"[{row['run_tag']}] {row['game_id']}: {row['winner']} in {row['days']} days "
@@ -1253,7 +1255,7 @@ def build_tasks(args, run_tag, run_dir, git_sha, ablations=None):
             for arm in arms:
                 tasks.append({
                     "requested_seed": requested_seed, "focal": arm, "arm": arm,
-                    "design": "team", "run_id": f"{requested_seed}-{arm}",
+                    "design": "team", "run_id": f"{campaign}-{requested_seed}-{arm}",
                     "campaign": campaign,
                     "gate": args.gate, "focal_role": "random",
                     "night_mode": args.night, "run_tag": run_tag,

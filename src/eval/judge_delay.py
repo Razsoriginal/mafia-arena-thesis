@@ -65,11 +65,11 @@ def _anonymise(history):
 def build_sample(votes_df, histories, n_delay=60, n_lynch=60, seed=20261106):
     """histories: list of {game_id, history:[...]}. Returns blinded dicts."""
     hist_by_game = {h["game_id"]: h["history"] for h in histories}
-    keys = ["run_tag", "game_id", "day"] if "run_tag" in votes_df.columns else ["game_id", "day"]
+    keys = [c for c in ("campaign", "run_tag", "game_id", "day") if c in votes_df.columns]
     delay_days, lynch_days = [], []
     for key, grp in votes_df.groupby(keys):
-        gid = key[1] if len(key) > 1 else key[0]
-        day = key[-1]
+        gid = str(grp["game_id"].iloc[0])
+        day = int(grp["day"].iloc[0])
         village = grp[grp["is_village"].astype(bool)] if "is_village" in grp.columns else grp
         is_delay = bool((village["vote"].astype(str) == "no-lynch").any())
         majority = str(grp["majority_vote"].iloc[0])
@@ -88,7 +88,7 @@ def build_sample(votes_df, histories, n_delay=60, n_lynch=60, seed=20261106):
         by_arm = {}
         arm_by_day = {}
         for key, grp in votes_df.groupby(keys):
-            arm_by_day[(str(key[1] if len(key) > 1 else key[0]), int(key[-1]))] = str(grp["arm"].iloc[0])
+            arm_by_day[(str(grp["game_id"].iloc[0]), int(grp["day"].iloc[0]))] = str(grp["arm"].iloc[0])
         for item in delay_days:
             by_arm.setdefault(arm_by_day.get((item["game_id"], item["day"]), "?"), []).append(item)
         arms = sorted(by_arm)

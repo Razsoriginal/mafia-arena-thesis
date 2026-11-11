@@ -209,6 +209,8 @@ def main():
         vdf = vdf_all
         if is_team and "game_id" in vdf.columns and "game_id" in df.columns:
             vdf = vdf[vdf["game_id"].astype(str).isin(set(df["game_id"].astype(str)))]
+            if args.campaign and "campaign" in vdf.columns:
+                vdf = vdf[vdf["campaign"].astype(str) == str(args.campaign)]
         if is_team and "is_village" in vdf.columns:
             for arm, g in vdf.groupby("arm"):
                 line = (f"\n[{arm}] team_cascade_resistance: {team_cascade_resistance(g):.3f} "
@@ -252,6 +254,8 @@ def main():
         tdf = tdf_all
         if is_team and "game_id" in tdf.columns and "game_id" in df.columns:
             tdf = tdf[tdf["game_id"].astype(str).isin(set(df["game_id"].astype(str)))]
+            if args.campaign and "campaign" in tdf.columns:
+                tdf = tdf[tdf["campaign"].astype(str) == str(args.campaign)]
         if "trust_source" in tdf.columns:
             print("\n--- Probe calibration (elicited, all arms) ---")
             probe = tdf[tdf["trust_source"].astype(str) == "probe"]
