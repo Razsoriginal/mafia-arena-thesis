@@ -227,7 +227,7 @@ Run-path amendment (F1/F2/F16/F17/F19/F26): spend is enforced against an append-
 
 1. Pooled JSON failures are at most 0.20 per game.
 2. Mean length is at least 1.5 days, using the count convention.
-3. Probe cost is at most Rs.0.35 per game.
+3. Probe cost is at most Rs.0.35 per game. *Clarified in v2 before any calibration data:* the cost is per **probed game**, meaning games in an LLM village arm. The `purpose=probe` cost is divided by the number of LLM-arm games. Null-arm games make no probe calls and are not in the denominator, because including them would dilute the measure. The smoke-team-01 estimate is Rs.0.41 per probed game, **measured** on n = 6 games with pre-fix code. That is a known risk for this condition, and it is not adjusted.
 4. The v2 n rule gives n ≥ 171.
 5. No code, prompt, model or protocol change has happened since the freeze tag.
 

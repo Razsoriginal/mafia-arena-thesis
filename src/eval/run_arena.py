@@ -1158,6 +1158,17 @@ def _probe_cost_from_raw(raw_root: str, n_games: int):
     return round(total / n_games, 6) if found else None
 
 
+def _probed_games(rows) -> int:
+    """Games in an LLM village arm; null arms make no probe calls."""
+    return sum(1 for r in rows or [] if str(r.get("arm", "")) not in NULL_ARMS)
+
+
+def _probe_cost_per_probed_game(raw_root: str, rows):
+    """Probe cost per probed game (Pre-reg v2 SS9 GO condition 3)."""
+    n = _probed_games(rows)
+    return _probe_cost_from_raw(raw_root, n) if n else None
+
+
 def _projected_trio_cost(kept_rows, planned_trio_cost: float, campaign=None) -> float:
     """max(planned, mean measured kept trio cost so far) (G4).
 
@@ -1339,7 +1350,8 @@ def _write_calibration_report(args, run_dir, campaign, report_path, rows, all_vo
                             if rec.get("purpose") == "probe":
                                 total += float(rec.get("cost_inr") or 0)
                                 found = True
-    pcost = round(total / len(g_rows), 6) if (found and g_rows) else None
+    n_probed = _probed_games(g_rows)
+    pcost = round(total / n_probed, 6) if (found and n_probed) else None
     report = _calibration_report(g_rows, v_rows, t_rows, probe_cost_per_game=pcost)
     for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
         d = os.path.dirname(dest)
@@ -1825,7 +1837,7 @@ def main():
                            ledger_path=ledger_path, campaign=campaign)
 
     if getattr(args, "calibration", False):
-        pcost = _probe_cost_from_raw(os.path.join(run_dir, "raw"), len(rows))
+        pcost = _probe_cost_per_probed_game(os.path.join(run_dir, "raw"), rows)
         report = _calibration_report(rows, all_votes, all_trust,
                                      probe_cost_per_game=pcost)
         for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
