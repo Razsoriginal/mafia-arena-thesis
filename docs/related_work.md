@@ -1,5 +1,8 @@
 # Related Work — Thesis Ch.2 (evidence table)
 
+> **Superseded (2026-11-12).** Section E's claims ("exformation: 1 paper", "Jev: zero papers", "almost empty") are refuted. Use `docs/research/prior_art.md` and `docs/thesis/ch2_related_work.md`. Several rows below were never verified and must not be cited without checking.
+
+
 Use for synopsis Ch.2 + AIWILD 4-pager Related. Every row = must-cite baseline or gap.
 
 ## A. Social-deduction benchmarks (crowded: ~15-20 papers — win-rate alone insufficient)
