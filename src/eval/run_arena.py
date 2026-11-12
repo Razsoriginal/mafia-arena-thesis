@@ -1657,8 +1657,13 @@ def _record_result(result: dict, args, run_dir: str, rows: list,
             tkeys = (["campaign", "game_id", "day", "agent", "target", "trust_source"]
                      if is_team and "trust_source" in tdf.columns else _tkeys)
             _upsert(os.path.join(os.path.dirname(args.out) or ".", "trust.parquet"), tdf, tkeys)
-    print(f"[{row['run_tag']}] {row['game_id']}: {row['winner']} in {row['days']} days "
-          f"role={row['focal_role']} json_failures={row['json_failures']}")
+    if is_team:
+        # Blinding (P0-K2): team runs never print outcomes; nuisance only.
+        print(f"[{row['run_tag']}] {row['game_id']}: done, {row['days']} days "
+              f"json_failures={row['json_failures']} status={status}")
+    else:
+        print(f"[{row['run_tag']}] {row['game_id']}: {row['winner']} in {row['days']} days "
+              f"role={row['focal_role']} json_failures={row['json_failures']}")
 
 
 def build_tasks(args, run_tag, run_dir, git_sha, ablations=None):
@@ -1711,6 +1716,16 @@ def build_tasks(args, run_tag, run_dir, git_sha, ablations=None):
                     "ablate": ablations, "git_sha": git_sha,
                 })
     return tasks
+
+
+def _print_end_summary(df, args):
+    """End-of-run console summary. Team runs print counts only (P0-K2)."""
+    if not len(df) or getattr(args, "calibration", False):
+        return
+    if getattr(args, "design", "focal") == "team":
+        print(df.groupby("focal").size().rename("games").to_string())
+        return
+    print(df[["focal", "winner", "focal_role"]].value_counts(dropna=False))
 
 
 def main():
@@ -1880,8 +1895,7 @@ def main():
         print(f"\nSaved {len(rows)} rows to {run_dir}/games.parquet (canonical skipped)")
     else:
         print(f"\nSaved {len(rows)} rows to {args.out} and {run_dir}/games.parquet")
-    if len(df) and not getattr(args, "calibration", False):
-        print(df[["focal", "winner", "focal_role"]].value_counts(dropna=False))
+    _print_end_summary(df, args)
     print(f"Run bundle: {run_dir}")
 
 
