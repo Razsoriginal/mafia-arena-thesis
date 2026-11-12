@@ -2,14 +2,14 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** Phase 0 nearly done. The re-smoke passed (0 JSON failures in 10 games; resume starts nothing). Next: bridge smoke, freeze, then calibration.
+- **Phase:** Phase 0 is done. Pre-reg v2 is frozen at tag `freeze-v2` and the confirmatory gate dry-run passes. The bridge smoke is running, followed by a load-test point at 24/32 and then calibration.
 - **Ledger:** `logs/spend_ledger.jsonl`, Rs.71.70 after smoke-team-02. Check it with `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
 - **In-flight jobs:** none.
 - **Last decision:** `docs/decisions/2026-11-12-rescope.md` chose Option B, a Mafia primary plus the IrrevOps bridge. Pre-reg v2 is committed (`d1a5eef`); v1 is tagged `prereg-v1`.
 - **Next 3 actions:**
-  1. Bridge smoke (at most Rs.5) and `bridge-freeze-v1`.
-  2. Primary freeze: fill the freeze block, commit, tag `freeze-v2`, dry-run `--confirmatory`.
-  3. Calibration: trios 0..19 with nulls, `--workers 4 --call-threads 4 --trio-window 2`, seed 5000.
+  1. Bridge smoke (`bridge-smoke-01`, at most Rs.5), then `bridge-freeze-v1`.
+  2. Load-test point at 24/32 concurrent requests (`loadtest-conc-02`, at most Rs.3) to choose the primary concurrency.
+  3. Calibration: `--confirmatory --calibration --campaign mvp-team-01 --seed 5000 --start-trio 0 --trios 20` with all 5 arms.
 
 **Last updated:** 2026-11-12
 **Branch:** `prereg-mvp` (pre-reg implementation through `bc80015`; smoke evidence committed after it)
@@ -18,6 +18,20 @@
 
 This is the live status file. `ROADMAP.md` is the plan; this file records what is
 actually done, what the logs prove, and what to do next.
+
+## Definition of done
+
+| Goal | Status | Evidence |
+|---|---|---|
+| G0 Research and re-scope | **Done** | `docs/research/` (search log, incidents, prior art), `docs/decisions/2026-11-12-rescope.md` |
+| G1 Pipeline fixed, fast, frozen | **Done** | Phase 0 fixes with mutation proofs (`docs/mutation_proofs.md`); smoke-team-02 had 0 JSON failures in 10 games; tag `freeze-v2` |
+| G2 Calibration and GO/NO-GO | Pending | — |
+| G3 Confirmatory dataset locked | Pending | — |
+| G4 Pre-registered analysis | Pending | `scripts/make_all.py` and `evaluate.py` are ready and blind-safe |
+| G5 Secondary cells | Pending | The IrrevOps bridge is built (`src/bridge/`) |
+| G6 Thesis assets | In progress | Ch.2 and Ch.3 drafts in `docs/thesis/`; one-command pipeline |
+| G7 Production bridge and `src/safety` run for real | In progress | `bridge-smoke-01` |
+| G8 Discoveries | In progress | `docs/DISCOVERIES.md` D-001 to D-006 |
 
 ---
 
