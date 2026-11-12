@@ -62,3 +62,32 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
 - **Result.** `DmnTpnAgent.reason()` counted living mafia from the role map. That count set the base-rate prior in DMN trust, which was fed into the cited-vote prompt, and the EVT threat. The pilot and smoke DMN trust values therefore carried hidden information; for example, the prior changed when a mafia player died. Fixed in P0-E2 using the public bound.
 - **Consequence.** The pilot decision-trust calibration (ECE 0.105) is not comparable to v2 and may be optimistic. The thesis must say so.
 - **Confidence.** Certain about the leak. Its size is not measured.
+
+## D-005. TPN "verification" lowers discrimination slightly and shrinks confidence almost uniformly (exploratory)
+
+- **Question.** Do the DMN/TPN fields predict mafia? Fields: DMN confidence, TPN revised confidence, `contradiction_found`, exformation volume.
+- **Data.** All non-confirmatory DMN traces on disk that join to a games table: 11 campaigns, 35 games, 332 hypotheses. Pilot, sweeps, trust-prior runs and smoke-team-01 are included. Only village (non-mafia) reasoning agents are counted, and self-suspicion is excluded. Output: `logs/explore/d005_exformation_auc.json`. Code: `src/explore/exformation_auc.py`.
+- **Method.** AUC with the score treated as P(mafia). The label is that the hypothesised suspect is mafia. CIs come from a 2,000-replicate bootstrap clustered by game. The DMN−TPN difference is paired on the same hypotheses.
+- **Result** (**measured**):
+
+  | Feature | AUC | 95% CI (game-clustered) | n rows / games |
+  |---|---:|---|---|
+  | DMN confidence | 0.732 | [0.647, 0.791] | 332 / 35 |
+  | TPN revised confidence | 0.677 | [0.623, 0.721] | 326 / 34 |
+  | TPN `contradiction_found` | 0.499 | [0.458, 0.539] | 326 / 34 |
+  | number of exformation items | 0.514 | [0.478, 0.548] | 332 / 35 |
+  | exformation characters | 0.548 | [0.490, 0.601] | 332 / 35 |
+
+  - Paired DMN−TPN AUC: **+0.052 [0.009, 0.095]**.
+  - TPN − DMN mean confidence shift: −0.209 for true mafia and −0.247 for innocents.
+- **Reading.**
+  - Verification moves confidence down by about the same amount for guilty and innocent suspects, and it slightly worsens ranking.
+  - Since the gate delays when the top revised confidence is below 0.35, much of the DMN arm's delaying plausibly comes from this near-uniform shrinkage, not from selective doubt.
+  - `contradiction_found` and exformation volume carry no signal at this n.
+- **Confidence.** Moderate for the AUC levels. Low to moderate for the paired difference, whose lower bound is near zero.
+- **Caveats.**
+  - Mixed code versions (pilot, focal and team designs).
+  - The suspects were pre-selected by DMN (base rate 0.47 against a 2/6 prior).
+  - The hidden-role leak (D-004) affected the trust prior, not these fields.
+  - A "contradiction" may cut either way.
+- **Paid replication needed?** No new run. The confirmatory DMN traces will contain the same fields. A pre-specified within-DMN replication (the same AUCs and the paired difference) is added to the post-lock exploratory plan. It is run only after `primary-locked`, because it uses the outcome labels of confirmatory games.

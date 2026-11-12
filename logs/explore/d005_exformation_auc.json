@@ -1,0 +1,87 @@
+{
+  "n_rows": 332,
+  "n_games": 35,
+  "campaigns": {
+    "tau-sweep-02-prior": 86,
+    "tau-sweep-01": 62,
+    "smoke-team-01": 56,
+    "pilot-cited-02": 31,
+    "pilot-prior-tau035": 21,
+    "trust-prior-02": 20,
+    "pilot-seatfix-01": 18,
+    "repeat-clean-04": 15,
+    "pilot-clean-02": 14,
+    "pilot-clean-03": 6,
+    "ablate-smoke": 3
+  },
+  "results": [
+    {
+      "feature": "dmn_conf",
+      "auc": 0.732,
+      "ci": [
+        0.647,
+        0.791
+      ],
+      "n_rows": 332,
+      "n_games": 35,
+      "base_rate_mafia": 0.473
+    },
+    {
+      "feature": "tpn_conf",
+      "auc": 0.677,
+      "ci": [
+        0.623,
+        0.721
+      ],
+      "n_rows": 326,
+      "n_games": 34,
+      "base_rate_mafia": 0.475
+    },
+    {
+      "feature": "contradiction",
+      "auc": 0.499,
+      "ci": [
+        0.458,
+        0.539
+      ],
+      "n_rows": 326,
+      "n_games": 34,
+      "base_rate_mafia": 0.475
+    },
+    {
+      "feature": "n_exformation",
+      "auc": 0.514,
+      "ci": [
+        0.478,
+        0.548
+      ],
+      "n_rows": 332,
+      "n_games": 35,
+      "base_rate_mafia": 0.473
+    },
+    {
+      "feature": "exf_chars",
+      "auc": 0.548,
+      "ci": [
+        0.49,
+        0.601
+      ],
+      "n_rows": 332,
+      "n_games": 35,
+      "base_rate_mafia": 0.473
+    }
+  ],
+  "paired_dmn_minus_tpn_auc": {
+    "diff": 0.052,
+    "ci": [
+      0.009,
+      0.095
+    ],
+    "n_rows": 326,
+    "n_games": 34
+  },
+  "mean_shift_tpn_minus_dmn": {
+    "0": -0.247,
+    "1": -0.209
+  }
+}
