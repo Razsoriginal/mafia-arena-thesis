@@ -68,5 +68,36 @@ class TestBlinding(unittest.TestCase):
         self.assertIn("Holm", out)
 
 
+
+class TestRunnerConsoleBlinding(unittest.TestCase):
+    def test_team_game_line_has_no_winner(self):
+        from src.eval import run_arena
+
+        args = type("A", (), {"no_canonical": True, "out": "x"})()
+        with tempfile.TemporaryDirectory() as td:
+            row = {"run_tag": "t", "game_id": "c-5000-dmn_village", "winner": "village", "days": 3,
+                   "focal_role": "villager", "json_failures": 0, "design": "team", "arm": "dmn_village",
+                   "campaign": "c", "requested_seed": 5000}
+            buf = io.StringIO()
+            with contextlib.redirect_stdout(buf):
+                run_arena._record_result({"row": row, "votes": [], "trust": []}, args, td, [],
+                                         canonical=False, ledger_path=None)
+        out = buf.getvalue().lower()
+        self.assertNotIn("village in", out)
+        self.assertNotIn("winner", out)
+        self.assertIn("3 days", out)
+
+    def test_team_run_end_summary_has_no_winner_table(self):
+        import inspect
+        from src.eval import run_arena
+        src = inspect.getsource(run_arena.main)
+        self.assertIn("_print_end_summary(df, args)", src)
+        df = pd.DataFrame([{"focal": "dmn_village", "winner": "village", "focal_role": "doctor", "design": "team"}])
+        buf = io.StringIO()
+        with contextlib.redirect_stdout(buf):
+            run_arena._print_end_summary(df, type("A", (), {"calibration": False, "design": "team"})())
+        self.assertNotIn("village", buf.getvalue().replace("dmn_village", ""))
+
+
 if __name__ == "__main__":
     unittest.main()
