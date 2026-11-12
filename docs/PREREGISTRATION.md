@@ -320,6 +320,7 @@ Every deviation from this document is logged with run tag, git sha, requested se
 | D2 | 2026-11-12 | logs/runs/*, logs/archive/* | various | Development runs before the pilot billed or estimated about Rs.250, outside the study budget definition (pilot + smoke = Rs.50.42). The ledger backfills only the pilot (Rs.30.9193, `source=pilot-backfill`), following that definition. | Not affected. |
 | D3 | 2026-11-12 | smoke-team-01 | 9000, 9100 | During the Phase 0 triage the analyst printed per-arm winners of the 10 non-confirmatory smoke games (n = 2 per arm). They were not used for any v2 decision. | Not affected (non-confirmatory data). |
 | D4 | 2026-11-12 | smoke-team-01 | 9200 | The third smoke trio never started, so the smoke run has 2 of 3 trios. | Not affected. |
+| D5 | 2026-11-12 | smoke-team-02 | 100000, 100100 | The re-smoke started on code whose console printed per-game winners and an end-of-run winner table by arm, and the analyst saw them (n = 2 per arm). They were not used for any decision. P0-K2 removed outcome printing for team runs before the freeze. | Not affected (non-confirmatory data). |
 
 The freeze identity is filled by the approved freeze step after the v2 re-smoke.
 

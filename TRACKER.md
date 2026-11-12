@@ -2,14 +2,14 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** Phase R is done (G0). Phase 0 is in progress: fixes landed; the load test, re-smoke and freeze are next.
-- **Ledger:** `logs/spend_ledger.jsonl` (one shared absolute path). It held Rs.51.24 at 2026-11-12 ~15:00 local; check `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
-- **In-flight jobs:** `loadtest-500diag` (`python -m src.explore.diag_500`, output `logs/runs/loadtest-500diag/`). Lane cap Rs.3.
+- **Phase:** Phase 0 nearly done. The re-smoke passed (0 JSON failures in 10 games; resume starts nothing). Next: bridge smoke, freeze, then calibration.
+- **Ledger:** `logs/spend_ledger.jsonl`, Rs.71.70 after smoke-team-02. Check it with `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
+- **In-flight jobs:** none.
 - **Last decision:** `docs/decisions/2026-11-12-rescope.md` chose Option B, a Mafia primary plus the IrrevOps bridge. Pre-reg v2 is committed (`d1a5eef`); v1 is tagged `prereg-v1`.
 - **Next 3 actions:**
-  1. Run the load test (`loadtest-*`, at most Rs.3) to choose `--workers`, `--call-threads` and `--trio-window`.
-  2. Re-smoke 1–2 trios on seeds ≥ 100000 (at most Rs.25) and accept if JSON failures ≤ 0.20 per game and resume works.
-  3. Freeze: fill the freeze block, then commit and create the tag `freeze-v2`.
+  1. Bridge smoke (at most Rs.5) and `bridge-freeze-v1`.
+  2. Primary freeze: fill the freeze block, commit, tag `freeze-v2`, dry-run `--confirmatory`.
+  3. Calibration: trios 0..19 with nulls, `--workers 4 --call-threads 4 --trio-window 2`, seed 5000.
 
 **Last updated:** 2026-11-12
 **Branch:** `prereg-mvp` (pre-reg implementation through `bc80015`; smoke evidence committed after it)
