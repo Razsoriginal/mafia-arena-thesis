@@ -1,5 +1,16 @@
 # TRACKER — Mafia Arena Thesis
 
+## Agent state (update at every milestone; read this first after a context reset)
+
+- **Phase:** Phase R is done (G0). Phase 0 is in progress: fixes landed; the load test, re-smoke and freeze are next.
+- **Ledger:** `logs/spend_ledger.jsonl` (one shared absolute path). It held Rs.51.24 at 2026-11-12 ~15:00 local; check `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
+- **In-flight jobs:** `loadtest-500diag` (`python -m src.explore.diag_500`, output `logs/runs/loadtest-500diag/`). Lane cap Rs.3.
+- **Last decision:** `docs/decisions/2026-11-12-rescope.md` chose Option B, a Mafia primary plus the IrrevOps bridge. Pre-reg v2 is committed (`d1a5eef`); v1 is tagged `prereg-v1`.
+- **Next 3 actions:**
+  1. Run the load test (`loadtest-*`, at most Rs.3) to choose `--workers`, `--call-threads` and `--trio-window`.
+  2. Re-smoke 1–2 trios on seeds ≥ 100000 (at most Rs.25) and accept if JSON failures ≤ 0.20 per game and resume works.
+  3. Freeze: fill the freeze block, then commit and create the tag `freeze-v2`.
+
 **Last updated:** 2026-11-12
 **Branch:** `prereg-mvp` (pre-reg implementation through `bc80015`; smoke evidence committed after it)
 **Status:** Pre-registered team-design MVP implemented and covered by **116 passing unit tests**. The first live team-design smoke ran on 2026-11-11 (`smoke-team-01`): 10 games, 2 of 3 planned trios, Rs.19.50. It proved the pipeline end to end but surfaced **15 JSON failures in 10 games (1.5/game)**, which must be triaged before the 20-trio calibration batch. No confirmatory game has run. The freeze block is still `PENDING`, so `--confirmatory` refuses to start.
