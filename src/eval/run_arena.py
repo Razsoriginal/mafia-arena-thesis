@@ -354,6 +354,8 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
         "git_status_summary": _git_status_summary(),
         "dirty_runpath": _dirty_runpath_files(),
         "calibration_trios": getattr(args, "calibration_trios", 20),
+        "trio_window": getattr(args, "trio_window", 1),
+        "call_threads": int(os.getenv("MAFIA_CALL_THREADS", "1") or 1),
         "confirmatory": bool(getattr(args, "confirmatory", False)),
         "llm": {
             "provider": settings.provider,
@@ -1252,6 +1254,237 @@ def _reconcile_trio(trio, ledger_path, run_dir, campaign):
             print(f"[{t.get('run_tag')}] spend reconcile failed for {t['run_id']}: {e}")
 
 
+class _InlineExecutor:
+    """Sequential stand-in for a pool (workers=1): runs at submit time."""
+
+    def submit(self, fn, *a, **k):
+        from concurrent.futures import Future
+        f = Future()
+        try:
+            f.set_result(fn(*a, **k))
+        except BaseException as e:  # noqa: BLE001 - delivered via result()
+            f.set_exception(e)
+        return f
+
+    def shutdown(self, wait=True, cancel_futures=False):
+        return None
+
+
+def _game_executor(workers: int):
+    if int(workers or 1) <= 1:
+        return _InlineExecutor()
+    if os.getenv("MAFIA_GAME_EXECUTOR", "") == "thread":  # tests only: in-process mocks
+        from concurrent.futures import ThreadPoolExecutor
+        return ThreadPoolExecutor(max_workers=int(workers))
+    return ProcessPoolExecutor(max_workers=int(workers))
+
+
+def _write_calibration_report(args, run_dir, campaign, report_path, rows, all_votes, all_trust):
+    """Nuisance-only report over the campaign's first CALIBRATION_TRIOS trios.
+
+    Uses canonical campaign rows when canonical writes are on, so a
+    calibration batch split over several --resume invocations is reported
+    whole; otherwise this invocation's rows.
+    """
+    cal_seeds = {int(args.seed) + i * 100 for i in range(CALIBRATION_TRIOS)}
+    g_rows, v_rows, t_rows = rows, all_votes, all_trust
+    if not getattr(args, "no_canonical", False):
+        base = os.path.dirname(args.out) or "."
+        def _load(name):
+            p = os.path.join(base, name)
+            if not os.path.exists(p):
+                return []
+            df = pd.read_parquet(p)
+            if "campaign" in df.columns:
+                df = df[df["campaign"].astype(str) == str(campaign)]
+            return df.to_dict("records")
+        g_rows = [r for r in _load(os.path.basename(args.out))
+                  if int(r.get("requested_seed") or -1) in cal_seeds] or rows
+        gids = {r.get("game_id") for r in g_rows}
+        v_rows = [r for r in _load("votes.parquet") if r.get("game_id") in gids] or all_votes
+        t_rows = [r for r in _load("trust.parquet") if r.get("game_id") in gids] or all_trust
+    runs_root = os.path.dirname(run_dir) or "."
+    total, found = 0.0, False
+    gids = {r.get("game_id") for r in g_rows}
+    for rd in (os.listdir(runs_root) if os.path.isdir(runs_root) else []):
+        raw = os.path.join(runs_root, rd, "raw")
+        if not os.path.isdir(raw):
+            continue
+        for td in os.listdir(raw):
+            if td.startswith("task-") and td[5:] in gids:
+                p = os.path.join(raw, td, "llm_raw.jsonl")
+                if os.path.exists(p):
+                    with open(p, encoding="utf-8") as f:
+                        for line in f:
+                            try:
+                                rec = json.loads(line)
+                            except Exception:
+                                continue
+                            if rec.get("purpose") == "probe":
+                                total += float(rec.get("cost_inr") or 0)
+                                found = True
+    pcost = round(total / len(g_rows), 6) if (found and g_rows) else None
+    report = _calibration_report(g_rows, v_rows, t_rows, probe_cost_per_game=pcost)
+    for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
+        d = os.path.dirname(dest)
+        if d:
+            os.makedirs(d, exist_ok=True)
+        with open(dest, "w", encoding="utf-8") as f:
+            json.dump(report, f, indent=2)
+    return report
+
+
+def _run_team_window(args, tasks, run_tag, run_dir, campaign, ledger_path,
+                     pending_path, go_path, report_path, rows, all_votes, all_trust):
+    """Seed-trio window (P0-S2): up to --trio-window trios in flight.
+
+    Each trio stays atomic: it reaches canonical only when all its games
+    finished. Before a trio is launched, ledger + projected cost of every
+    in-flight trio + this one must fit the cap. Trio index >= 20 needs a
+    valid GO; the calibration report is written once trios 0..19 are all
+    finalised (completion order does not matter).
+    """
+    from concurrent.futures import FIRST_COMPLETED, wait
+
+    cap = float(getattr(args, "budget_cap", PREREG_BUDGET_CAP))
+    window = max(1, int(getattr(args, "trio_window", 1) or 1))
+    start_trio = int(getattr(args, "start_trio", 0) or 0)
+    # Trio index from the seed, not the queue position: --resume removes
+    # completed trios, which shifted positions in the old loop (P0-S2).
+    queue = [((int(trio[0]["requested_seed"]) - int(args.seed)) // 100, trio)
+             for trio in _group_trios(tasks)]
+    ex = _game_executor(getattr(args, "workers", 1))
+    inflight = {}  # trio_index -> {"trio", "futs": {fut: task}, "results", "billing", "failed"}
+    fut_owner = {}
+    stop_launch = False
+    billing_abort = False
+    # Calibration trios not queued here were completed earlier or precede
+    # --start-trio; the report fires only when trio 19 finalises in this
+    # invocation (as before) and all of 0..19 are done.
+    cal_done = {i for i in range(CALIBRATION_TRIOS)} - {i for i, _ in queue}
+    finalised_here = set()
+    cal_reported = False
+
+    def _projected():
+        hist = [{"requested_seed": e.get("requested_seed"), "campaign": e.get("campaign"),
+                 "billed_cost_inr": e.get("cost_inr"), "ledger_status": e.get("status")}
+                for e in _ledger_entries(ledger_path)]
+        return _projected_trio_cost(hist, getattr(args, "planned_trio_cost", 8.13), campaign=campaign)
+
+    def _launch():
+        nonlocal stop_launch
+        while queue and not stop_launch and len(inflight) < window:
+            idx, trio = queue[0]
+            if idx >= CALIBRATION_TRIOS:
+                ok, reason = _validate_calibration_go(go_path, campaign, report_path)
+                if not ok:
+                    if not inflight:
+                        print(f"[{run_tag}] calibration pause before trio {idx}: {reason}.")
+                        stop_launch = True
+                    return  # wait for calibration trios to finish first
+            proj = _projected()
+            ledger_now = _ledger_total(ledger_path)
+            need = ledger_now + proj * (len(inflight) + 1)
+            if need > cap:
+                print(f"[{run_tag}] BUDGET projection Rs.{ledger_now:.2f} + "
+                      f"{len(inflight) + 1} x Rs.{proj:.2f} exceeds cap Rs.{cap}; "
+                      "trio not started.")
+                stop_launch = True
+                return
+            queue.pop(0)
+            st = {"trio": trio, "futs": {}, "results": [], "billing": False, "failed": False}
+            for t in trio:
+                f = ex.submit(_run_task, t)
+                st["futs"][f] = t
+                fut_owner[f] = idx
+                # Never start another game after a 402 (inline executor
+                # runs at submit time; pool futures finish fast on 402).
+                if f.done() and isinstance(f.exception(), BillingExhausted):
+                    stop_launch = True
+                    break
+            inflight[idx] = st
+
+    def _finalise(idx):
+        nonlocal stop_launch, billing_abort
+        st = inflight.pop(idx)
+        trio, results = st["trio"], st["results"]
+        seed0 = trio[0]["requested_seed"] if trio else None
+        arm_names = [t["arm"] for t in trio]
+        for r in results:
+            all_votes.extend(r.get("votes") or [])
+            all_trust.extend(r.get("trust") or [])
+        if st["billing"] or st["failed"] or len(results) != len(trio):
+            # Atomicity (F2/F16/F17): partial trio stays in the bundle
+            # only, spend is still ledgered, trio marked pending.
+            for r in results:
+                _record_result(r, args, run_dir, rows, canonical=False,
+                               ledger_path=ledger_path, campaign=campaign)
+            _reconcile_trio(trio, ledger_path, run_dir, campaign)
+            _mark_pending(pending_path, campaign, seed0, arm_names,
+                          "billing_exhausted" if st["billing"] else "worker_failure")
+            print(f"[{run_tag}] trio {seed0} pending "
+                  f"({'billing' if st['billing'] else 'worker failure'}); "
+                  "rerun with --resume on the same seeds.")
+            if st["billing"]:
+                billing_abort = True
+                stop_launch = True
+            return
+        # Keep the trio's games in task (arm) order for deterministic rows.
+        order = {t["run_id"]: i for i, t in enumerate(trio)}
+        results.sort(key=lambda r: order.get(r["row"].get("game_id"), 0))
+        for r in results:
+            _record_result(r, args, run_dir, rows, canonical=True,
+                           ledger_path=ledger_path, campaign=campaign)
+        _reconcile_trio(trio, ledger_path, run_dir, campaign)
+        _clear_pending(pending_path, campaign, seed0)
+        finalised_here.add(idx)
+        if idx < CALIBRATION_TRIOS:
+            cal_done.add(idx)
+        if _ledger_total(ledger_path) > cap:
+            print(f"[{run_tag}] BUDGET CAP Rs.{cap} exceeded "
+                  f"(ledger Rs.{_ledger_total(ledger_path):.2f}); aborting remaining trios.")
+            stop_launch = True
+
+    try:
+        _launch()
+        while inflight:
+            pending_futs = [f for st in inflight.values() for f in st["futs"] if not f.done()]
+            if pending_futs:
+                wait(pending_futs, return_when=FIRST_COMPLETED)
+            for idx in list(inflight):
+                st = inflight[idx]
+                for f, t in list(st["futs"].items()):
+                    if not f.done() or f in st.get("_seen", set()):
+                        continue
+                    st.setdefault("_seen", set()).add(f)
+                    try:
+                        st["results"].append(f.result())
+                    except BillingExhausted as e:
+                        print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
+                        st["billing"] = True
+                        stop_launch = True
+                    except Exception as e:
+                        print(f"[{run_tag}] worker failed for {t['run_id']}: "
+                              f"{type(e).__name__}: {e}")
+                        st["failed"] = True
+                if all(f.done() for f in st["futs"]):
+                    _finalise(idx)
+            if (not cal_reported and (CALIBRATION_TRIOS - 1) in finalised_here
+                    and len(cal_done) >= CALIBRATION_TRIOS
+                    and not any(i < CALIBRATION_TRIOS for i in inflight)):
+                ok, _r = _validate_calibration_go(go_path, campaign, report_path)
+                if not ok:
+                    _write_calibration_report(args, run_dir, campaign, report_path,
+                                              rows, all_votes, all_trust)
+                    cal_reported = True
+                    print(f"[{run_tag}] calibration pause after {CALIBRATION_TRIOS} trios; "
+                          f"report in {report_path}. Create a valid GO in {go_path} to continue.")
+                    stop_launch = True
+            _launch()
+    finally:
+        ex.shutdown(wait=True, cancel_futures=True)
+
+
 def _run_one_with_retry(task, runner=None):
     runner = runner or _run_task_once
     try:
@@ -1438,6 +1671,10 @@ def main():
     ap.add_argument("--run-tag", type=str, default=None)
     ap.add_argument("--max-days", type=int, default=5,
                     help="day cap (lower only for pipeline smoke tests)")
+    ap.add_argument("--trio-window", type=int, default=1,
+                    help="seed-trios in flight at once (P0-S2); each trio stays atomic")
+    ap.add_argument("--call-threads", type=int, default=None,
+                    help="intra-game concurrent calls (P0-S1); sets MAFIA_CALL_THREADS")
     ap.add_argument("--workers", type=int, default=4,
                     help="parallel game processes (default 4; 1 = sequential)")
     ap.add_argument("--tau", type=float, default=None,
@@ -1477,6 +1714,8 @@ def main():
                     help="write only logs/runs/<run_tag>/ (smoke tests)")
     ap.add_argument("--out", type=str, default="logs/games.parquet")
     args = ap.parse_args()
+    if getattr(args, "call_threads", None):
+        os.environ["MAFIA_CALL_THREADS"] = str(int(args.call_threads))
     if getattr(args, "design", None) == "team" and getattr(args, "tau", None) is None:
         ap.error("--tau is required for --design team (G11): pass --tau 0.35 explicitly")
     if args.tau is not None:
@@ -1533,113 +1772,8 @@ def main():
     rows = []
     all_votes, all_trust = [], []
     if getattr(args, "design", "focal") == "team":
-        aborted = False
-        start_trio = int(getattr(args, "start_trio", 0) or 0)
-        for pos, trio in enumerate(_group_trios(tasks)):
-            if aborted:
-                break
-            trio_index = start_trio + pos
-            # In-loop calibration gate (G7): index >= 20 needs valid GO.
-            if trio_index >= CALIBRATION_TRIOS:
-                ok, reason = _validate_calibration_go(go_path, campaign, report_path)
-                if not ok:
-                    print(f"[{run_tag}] calibration pause before trio {trio_index}: {reason}.")
-                    break
-            # In-flight projection (G4): never start a trio the cap
-            # cannot cover on projected cost (ledger history + this run).
-            hist = [{"requested_seed": e.get("requested_seed"),
-                     "campaign": e.get("campaign"),
-                     "billed_cost_inr": e.get("cost_inr"),
-                     "ledger_status": e.get("status")}
-                    for e in _ledger_entries(ledger_path)]
-            # rows from this invocation are already in the ledger (kept),
-            # so hist alone is the campaign's measured history.
-            projected = _projected_trio_cost(hist,
-                                             getattr(args, "planned_trio_cost", 8.13),
-                                             campaign=campaign)
-            ledger_now = _ledger_total(ledger_path)
-            if ledger_now + projected > float(getattr(args, "budget_cap", PREREG_BUDGET_CAP)):
-                print(f"[{run_tag}] BUDGET projection Rs.{ledger_now:.2f} + "
-                      f"Rs.{projected:.2f} exceeds cap Rs.{args.budget_cap}; "
-                      "trio not started.")
-                break
-            seed0 = trio[0]["requested_seed"] if trio else None
-            arm_names = [t["arm"] for t in trio]
-            results, billing_hit, failed = [], False, False
-            if args.workers > 1 and len(trio) > 1:
-                ex = ProcessPoolExecutor(max_workers=min(args.workers, len(trio)))
-                futures = {ex.submit(_run_task, t): t for t in trio}
-                try:
-                    for fut in as_completed(futures):
-                        t = futures[fut]
-                        try:
-                            results.append(fut.result())
-                        except BillingExhausted as e:
-                            print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
-                            billing_hit = True
-                        except Exception as e:
-                            print(f"[{run_tag}] worker failed for {t['run_id']}: "
-                                  f"{type(e).__name__}: {e}")
-                            failed = True
-                finally:
-                    for f in futures:
-                        f.cancel()
-                    ex.shutdown(wait=True, cancel_futures=True)
-            else:
-                for t in trio:
-                    try:
-                        results.append(_run_task(t))
-                    except BillingExhausted as e:
-                        print(f"\n[{run_tag}] BILLING EXHAUSTED at {t['run_id']}: {e}")
-                        billing_hit = True
-                        break
-                    except Exception as e:
-                        print(f"[{run_tag}] worker failed for {t['run_id']}: "
-                              f"{type(e).__name__}: {e}")
-                        failed = True
-            for r in results:
-                all_votes.extend(r.get("votes") or [])
-                all_trust.extend(r.get("trust") or [])
-            if billing_hit or failed or len(results) != len(trio):
-                # Atomicity (F2/F16/F17): partial trio stays in the bundle
-                # only, spend is still ledgered, trio marked pending.
-                for r in results:
-                    _record_result(r, args, run_dir, rows, canonical=False,
-                                   ledger_path=ledger_path, campaign=campaign)
-                _reconcile_trio(trio, ledger_path, run_dir, campaign)
-                _mark_pending(pending_path, campaign, seed0, arm_names,
-                              "billing_exhausted" if billing_hit else "worker_failure")
-                print(f"[{run_tag}] trio {seed0} pending "
-                      f"({'billing' if billing_hit else 'worker failure'}); "
-                      "rerun with --resume on the same seeds.")
-                if billing_hit:
-                    aborted = True
-                    break
-                continue
-            for r in results:
-                _record_result(r, args, run_dir, rows, canonical=True,
-                               ledger_path=ledger_path, campaign=campaign)
-            _reconcile_trio(trio, ledger_path, run_dir, campaign)
-            _clear_pending(pending_path, campaign, seed0)
-            if _ledger_total(ledger_path) > float(getattr(args, "budget_cap", PREREG_BUDGET_CAP)):
-                print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
-                      f"(ledger Rs.{_ledger_total(ledger_path):.2f}); aborting remaining trios.")
-                break
-            if trio_index + 1 >= CALIBRATION_TRIOS:
-                ok, _reason = _validate_calibration_go(go_path, campaign, report_path)
-                if not ok:
-                    pcost = _probe_cost_from_raw(os.path.join(run_dir, "raw"), len(rows))
-                    report = _calibration_report(rows, all_votes, all_trust,
-                                                 probe_cost_per_game=pcost)
-                    for dest in (os.path.join(run_dir, "calibration_report.json"), report_path):
-                        d = os.path.dirname(dest)
-                        if d:
-                            os.makedirs(d, exist_ok=True)
-                        with open(dest, "w", encoding="utf-8") as f:
-                            json.dump(report, f, indent=2)
-                    print(f"[{run_tag}] calibration pause after {trio_index + 1} trios; "
-                          f"report in {report_path}. Create a valid GO in {go_path} to continue.")
-                    break
+        _run_team_window(args, tasks, run_tag, run_dir, campaign, ledger_path,
+                         pending_path, go_path, report_path, rows, all_votes, all_trust)
     elif args.workers > 1 and len(tasks) > 1:
         ex = ProcessPoolExecutor(max_workers=min(args.workers, len(tasks)))
         futures = {ex.submit(_run_task, t): t for t in tasks}
