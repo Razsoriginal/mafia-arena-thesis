@@ -73,17 +73,25 @@ def _upsert(path: str, new_df: pd.DataFrame, keys: list):
         return
     os.makedirs(os.path.dirname(path) or ".", exist_ok=True)
     if os.path.exists(path):
+        # P0-U1: never drop existing rows. The old code fell back to
+        # writing only new_df when the read or concat failed, silently
+        # discarding the table. Fail loudly and leave the file untouched.
         try:
             old = pd.read_parquet(path)
+        except Exception as e:
+            raise RuntimeError(f"_upsert: cannot read existing {path}; refusing to overwrite: {e}") from e
+        try:
             df = pd.concat([old, new_df], ignore_index=True)
-            present = [k for k in keys if k in df.columns]
-            if present:
-                df = df.drop_duplicates(subset=present, keep="last")
-        except Exception:
-            df = new_df
+        except Exception as e:
+            raise RuntimeError(f"_upsert: cannot merge new rows into {path}; refusing to overwrite: {e}") from e
+        present = [k for k in keys if k in df.columns]
+        if present:
+            df = df.drop_duplicates(subset=present, keep="last")
     else:
         df = new_df
-    df.to_parquet(path, index=False)
+    tmp = path + ".tmp"
+    df.to_parquet(tmp, index=False)
+    os.replace(tmp, path)  # atomic: a crash mid-write cannot truncate the table
 
 
 PREREG_MODEL = "meta/muse-spark-1.3-contributor"
