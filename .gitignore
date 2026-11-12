@@ -59,5 +59,8 @@ desktop.ini
 *.orig
 *.rej
 
+# Runtime lock for the append-only spend ledger (contents are evidence)
+logs/spend_ledger.jsonl.lock
+
 # NOTE: logs/ is intentionally tracked — it holds thesis evidence
 # (games*.parquet, progress.jsonl, raw LLM responses, traces).
