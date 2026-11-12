@@ -96,7 +96,7 @@ PREREG_BASE_URL = "https://aicredits.in/v1"
 PREREG_EVT_THRESHOLD = 0.6
 PREREG_NIGHT = "llm"
 PREREG_MAX_DAYS = 5
-PREREG_BUDGET_CAP = 1600.0
+PREREG_BUDGET_CAP = 2000.0  # Pre-reg v2 SS9: hard cap, no locked reserve
 PRIMARY_ARMS = ("dmn_village", "cot_village", "cotx3_village")
 NULL_ARMS = ("random_village", "majority_village")
 CONFIRMATORY_SEED_BASE = 5000
@@ -347,7 +347,7 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
         "start_trio": getattr(args, "start_trio", 0),
         "trios": getattr(args, "trios", None),
         "spend_ledger": _ledger_path(args),
-        "budget_cap_inr": getattr(args, "budget_cap", 1600.0),
+        "budget_cap_inr": getattr(args, "budget_cap", PREREG_BUDGET_CAP),
         "planned_trio_cost_inr": getattr(args, "planned_trio_cost", 8.13),
         "effective_tau": getattr(args, "tau", None) if getattr(args, "tau", None) is not None else settings.tau_delay,
         "git_status_summary": _git_status_summary(),
@@ -1412,7 +1412,7 @@ def main():
                     help="comma-separated TAU_DELAY values; repeats the dmn_tpn cells per tau")
     ap.add_argument("--ablate", type=str, default="",
                     help="comma-separated dmn_tpn ablations: exformation,tpn,evt")
-    ap.add_argument("--budget-cap", type=float, default=1600.0,
+    ap.add_argument("--budget-cap", type=float, default=PREREG_BUDGET_CAP,
                     help="cumulative billed Rs. cap; abort after current trio")
     ap.add_argument("--calibration-trios", type=int, default=20)
     ap.add_argument("--campaign", type=str, default=None,
@@ -1476,7 +1476,7 @@ def main():
                     f"Continuation refused at trio {args.start_trio}: {reason}. "
                     f"GO must be JSON with campaign, calibration_report_sha256, "
                     f"created_at and approved_by in {go_path}.")
-    if (_ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0))
+    if (_ledger_total(ledger_path) > float(getattr(args, "budget_cap", PREREG_BUDGET_CAP))
             and getattr(args, "budget_cap", None) is not None):
         print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} already exceeded "
               f"(ledger Rs.{_ledger_total(ledger_path):.2f}); no games started.")
@@ -1524,7 +1524,7 @@ def main():
                                              getattr(args, "planned_trio_cost", 8.13),
                                              campaign=campaign)
             ledger_now = _ledger_total(ledger_path)
-            if ledger_now + projected > float(getattr(args, "budget_cap", 1600.0)):
+            if ledger_now + projected > float(getattr(args, "budget_cap", PREREG_BUDGET_CAP)):
                 print(f"[{run_tag}] BUDGET projection Rs.{ledger_now:.2f} + "
                       f"Rs.{projected:.2f} exceeds cap Rs.{args.budget_cap}; "
                       "trio not started.")
@@ -1587,7 +1587,7 @@ def main():
                                ledger_path=ledger_path, campaign=campaign)
             _reconcile_trio(trio, ledger_path, run_dir, campaign)
             _clear_pending(pending_path, campaign, seed0)
-            if _ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0)):
+            if _ledger_total(ledger_path) > float(getattr(args, "budget_cap", PREREG_BUDGET_CAP)):
                 print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
                       f"(ledger Rs.{_ledger_total(ledger_path):.2f}); aborting remaining trios.")
                 break
