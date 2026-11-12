@@ -124,8 +124,15 @@ class TestConcurrencyEquivalence(unittest.TestCase):
             golden = json.load(f)
         for arm, ref in golden.items():
             got = json.loads(json.dumps(_run(arm, 8), sort_keys=True))
-            for k in ("history", "votes", "trust", "winner", "day"):
+            for k in ("history", "trust", "winner", "day"):
                 self.assertEqual(got[k], ref[k], f"{arm}:{k}")
+            # Vote rows: compare on the golden's columns. Later additive
+            # schema fields (v2 lynched / lynched_is_mafia /
+            # vote_target_is_mafia) are covered by their own tests.
+            ref_votes, got_votes = json.loads(ref["votes"]), json.loads(got["votes"])
+            self.assertEqual(len(got_votes), len(ref_votes), arm)
+            for gv, rv in zip(got_votes, ref_votes):
+                self.assertEqual({k: gv.get(k) for k in rv}, rv, f"{arm}:votes")
             for k, v in ref["cost"].items():
                 self.assertAlmostEqual(got["cost"][k], v, places=5, msg=f"{arm}:cost:{k}")
 

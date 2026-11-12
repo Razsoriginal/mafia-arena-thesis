@@ -669,6 +669,20 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         else:
             game.add("engine", f"Day {day}: No lynch (delay).", f"result-{day}")
         game.check_over()
+        # v2 action-boundary fields (Pre-reg v2 SS12.22-12.24): the engine's
+        # lynch result for the day and the true role of each vote target.
+        lynched_str = str(lynched) if lynched is not None else None
+        lynched_is_mafia = (game.players[int(lynched)].role == "mafia") if lynched is not None else None
+
+        def _target_is_mafia(v):
+            try:
+                pid = int(str(v))
+            except Exception:
+                return None
+            if 0 <= pid < len(game.players):
+                return game.players[pid].role == "mafia"
+            return None
+
         # per-day metric rows (ALL voters, not just focal)
         for voter, v in votes.items():
             info = infos.get(voter, {})
@@ -693,6 +707,8 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 "design": design, "arm": arm or focal,
                 "voter_role": voter_role, "is_village": voter_role != "mafia",
                 "plurality_tied": bool(plurality_tied),
+                "lynched": lynched_str, "lynched_is_mafia": lynched_is_mafia,
+                "vote_target_is_mafia": _target_is_mafia(v),
                 "samples": info.get("samples"), "sample_parse_fails": info.get("sample_parse_fails"),
                 "n_sample_parse_fails": info.get("n_sample_parse_fails"),
             })
