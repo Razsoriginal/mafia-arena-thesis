@@ -116,3 +116,15 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The pilot's "2.14 days" in TRACKER is a zero-based index. The count convention gives about 3.
 - **Confidence.** High for the pooled mechanics. Code versions are mixed (the pre-P0-E1 parity day inflates length slightly).
 - **Paid replication needed?** No.
+
+## D-007. The provider enforces about 20 concurrent requests per key; latency does not degrade below that
+
+- **Data.**
+  - `logs/runs/loadtest-conc-01/` (levels 1, 4, 8, 16; 46 calls; Rs.2.85).
+  - `logs/runs/loadtest-conc-02/` (level 32; 32 calls; Rs.0.85).
+- **Result** (**measured**).
+  - Median latency was 22–28 s at levels 1 to 32.
+  - Timeouts (~92 s 500s) occurred in 4–10% of calls at every level, with no trend.
+  - At level 32, exactly 20 requests were accepted. The other 12 returned `429 Concurrency Limit Exceeded` within about 5 s.
+- **Decision.** Primary runs use `--workers 6 --call-threads 3 --trio-window 2`. Speech is sequential, so most of the time each game has one request in flight. The worst-case peak is 18 if every game is in a parallel phase at once. Any 429 is retried with backoff under P0-R1. Concurrency is a timing parameter only (P0-S1 equivalence proof).
+- **Confidence.** High for the limit (an explicit error message). Moderate for "no degradation", given small n per level.

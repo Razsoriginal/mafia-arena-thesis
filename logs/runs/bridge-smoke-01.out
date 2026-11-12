@@ -1,0 +1,17 @@
+[bridge-smoke-01] bridge-smoke-01-F1-0-act-B0_bare-r100600: act_correct steps=4 Rs.0.0520
+[bridge-smoke-01] bridge-smoke-01-F1-0-act-B2_external_gate-r100600: act_correct steps=4 Rs.0.0556
+[bridge-smoke-01] bridge-smoke-01-F1-0-act-B1_prompt_rule-r100600: act_correct steps=4 Rs.0.0548
+[bridge-smoke-01] bridge-smoke-01-F1-0-abstain-B1_prompt_rule-r100600: abstain_justified steps=3 Rs.0.0378
+[bridge-smoke-01] bridge-smoke-01-F1-0-abstain-B0_bare-r100600: abstain_justified steps=3 Rs.0.0435
+[bridge-smoke-01] bridge-smoke-01-F1-0-abstain-B2_external_gate-r100600: abstain_justified steps=3 Rs.0.0363
+[bridge-smoke-01] bridge-smoke-01-F5-0-act-B0_bare-r100600: act_correct steps=2 Rs.0.0396
+[bridge-smoke-01] bridge-smoke-01-F1-0-abstain-B3_verify_delay-r100600: abstain_justified steps=3 Rs.0.0370
+[bridge-smoke-01] bridge-smoke-01-F5-0-act-B1_prompt_rule-r100600: act_correct steps=3 Rs.0.0875
+[bridge-smoke-01] bridge-smoke-01-F5-0-act-B3_verify_delay-r100600: act_correct steps=2 Rs.0.0757
+[bridge-smoke-01] bridge-smoke-01-F5-0-abstain-B0_bare-r100600: abstain_justified steps=2 Rs.0.0331
+[bridge-smoke-01] bridge-smoke-01-F1-0-act-B3_verify_delay-r100600: abstain_needless steps=6 Rs.0.2097
+[bridge-smoke-01] bridge-smoke-01-F5-0-abstain-B1_prompt_rule-r100600: abstain_justified steps=2 Rs.0.0335
+[bridge-smoke-01] bridge-smoke-01-F5-0-act-B2_external_gate-r100600: act_correct steps=3 Rs.0.0577
+[bridge-smoke-01] bridge-smoke-01-F5-0-abstain-B2_external_gate-r100600: abstain_justified steps=2 Rs.0.0454
+[bridge-smoke-01] bridge-smoke-01-F5-0-abstain-B3_verify_delay-r100600: abstain_justified steps=2 Rs.0.0304
+[bridge-smoke-01] 16 episodes this run; campaign spend Rs.0.9296

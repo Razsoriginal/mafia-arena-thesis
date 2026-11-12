@@ -1,0 +1,13 @@
+[
+  {
+    "level": 32,
+    "n": 32,
+    "ok": 17,
+    "timeouts_500": 3,
+    "lat_med": 24.8,
+    "lat_p90": 92.1,
+    "wall_s": 96.0,
+    "calls_per_min": 20.0,
+    "spent": 0.8524
+  }
+]

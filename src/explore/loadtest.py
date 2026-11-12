@@ -12,7 +12,8 @@ from src.llm_client import _est_cost_inr
 from src.explore.diag_500 import build_prompts, one_call
 from src.config import settings
 
-CAMPAIGN = "loadtest-conc-01"
+import os as _os
+CAMPAIGN = _os.getenv("LOADTEST_CAMPAIGN", "loadtest-conc-01")
 _lock = threading.Lock()
 
 
