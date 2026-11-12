@@ -1,7 +1,7 @@
 # Pre-Registration — Calibrated Delay for Irreversible Agent Actions under Deception (Mafia Arena + IrrevOps bridge)
 
 **Version:** 2 (2026-11-12). Version 1 (2026-11-06) is preserved in git as tag `prereg-v1`.
-**Status:** Living document until the freeze tag; binding afterwards (deviations in §15 only).
+**Status:** **Frozen** at tag `freeze-v2` (2026-11-12). Binding from here on; deviations go in §15 only, and a change to a frozen item ends the confirmatory set (§11, §12.18).
 **Branch at writing:** `prereg-mvp`
 **Starting sha (v1):** `305e9898547be3af621006f1e1c66fc687235dda`
 
@@ -39,9 +39,9 @@ Harm and over-blocking are always reported together. A null or negative result i
 
 <!-- freeze
 prompts_sha256: d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc
-runpath_sha256: PENDING
-freeze_git_sha: PENDING
-freeze_tag: PENDING
+runpath_sha256: 3fca1ecb5802dce0f7a2ade29e1c08f990a2c2eba0261d7b6e9182566e49d869
+freeze_git_sha: ebfa6a1faf79074d11326d956311818895ce1665
+freeze_tag: freeze-v2
 -->
 
 The block above is the machine-readable freeze identity (§8). `run_arena.py`
@@ -322,7 +322,7 @@ Every deviation from this document is logged with run tag, git sha, requested se
 | D4 | 2026-11-12 | smoke-team-01 | 9200 | The third smoke trio never started, so the smoke run has 2 of 3 trios. | Not affected. |
 | D5 | 2026-11-12 | smoke-team-02 | 100000, 100100 | The re-smoke started on code whose console printed per-game winners and an end-of-run winner table by arm, and the analyst saw them (n = 2 per arm). They were not used for any decision. P0-K2 removed outcome printing for team runs before the freeze. | Not affected (non-confirmatory data). |
 
-The freeze identity is filled by the approved freeze step after the v2 re-smoke.
+The freeze identity was filled on 2026-11-12, after the v2 re-smoke passed (smoke-team-02: 0 JSON failures in 10 games; resume started nothing). Run path frozen at the commit in `freeze_git_sha`; tag `freeze-v2`.
 
 ## 16. IrrevOps bridge (v2; secondary cell 0; estimation only)
 
