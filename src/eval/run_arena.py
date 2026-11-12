@@ -338,12 +338,32 @@ def _assert_confirmatory(args):
         raise SystemExit("Confirmatory pre-registration check failed: " + "; ".join(errors))
 
 
+def _display_path(p):
+    """Repo-relative form of a path for manifests (no home directory or
+    username in published run bundles). Paths outside the repo keep only
+    their basename."""
+    if not p:
+        return p
+    root = os.path.dirname(os.path.dirname(_default_ledger_path()))
+    ap = os.path.abspath(str(p))
+    try:
+        if os.path.commonpath([ap, root]) == root:
+            return os.path.relpath(ap, root).replace(os.sep, "/")
+    except ValueError:
+        pass
+    return os.path.basename(ap) if os.path.isabs(str(p)) else str(p)
+
+
 def _write_manifest(path: str, args, run_tag: str, git_sha: str):
+    _args_view = dict(vars(args))
+    for _k in ("spend_ledger", "pending_file", "calibration_go", "calibration_report", "out"):
+        if _args_view.get(_k):
+            _args_view[_k] = _display_path(_args_view[_k])
     manifest = {
         "run_tag": run_tag,
         "started_at": datetime.now(timezone.utc).isoformat(),
         "git_sha": git_sha,
-        "args": vars(args),
+        "args": _args_view,
         "design": getattr(args, "design", "focal"),
         "arm_map": TEAM_ARMS if getattr(args, "design", "focal") == "team" else {},
         "arms": getattr(args, "arms", None),
@@ -355,7 +375,7 @@ def _write_manifest(path: str, args, run_tag: str, git_sha: str):
         "planned_trios": getattr(args, "planned_trios", None),
         "start_trio": getattr(args, "start_trio", 0),
         "trios": getattr(args, "trios", None),
-        "spend_ledger": _ledger_path(args),
+        "spend_ledger": _display_path(_ledger_path(args)),
         "budget_cap_inr": getattr(args, "budget_cap", PREREG_BUDGET_CAP),
         "planned_trio_cost_inr": getattr(args, "planned_trio_cost", 8.13),
         "effective_tau": getattr(args, "tau", None) if getattr(args, "tau", None) is not None else settings.tau_delay,
