@@ -1,0 +1,46 @@
+[
+  {
+    "level": 1,
+    "n": 10,
+    "ok": 9,
+    "timeouts_500": 1,
+    "lat_med": 28.1,
+    "lat_p90": 63.1,
+    "wall_s": 384.9,
+    "calls_per_min": 1.56,
+    "spent": 0.3811
+  },
+  {
+    "level": 4,
+    "n": 10,
+    "ok": 8,
+    "timeouts_500": 2,
+    "lat_med": 23.4,
+    "lat_p90": 92.7,
+    "wall_s": 134.9,
+    "calls_per_min": 4.45,
+    "spent": 0.3329
+  },
+  {
+    "level": 8,
+    "n": 10,
+    "ok": 10,
+    "timeouts_500": 0,
+    "lat_med": 22.1,
+    "lat_p90": 49.9,
+    "wall_s": 61.3,
+    "calls_per_min": 9.79,
+    "spent": 0.4417
+  },
+  {
+    "level": 16,
+    "n": 16,
+    "ok": 15,
+    "timeouts_500": 1,
+    "lat_med": 26.2,
+    "lat_p90": 70.2,
+    "wall_s": 92.8,
+    "calls_per_min": 10.35,
+    "spent": 0.6956
+  }
+]

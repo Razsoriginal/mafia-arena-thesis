@@ -1,0 +1,42 @@
+0 night json 0.0 True None 62.1 1815
+0 night plain 0.0 True None 20.9 1955
+0 night json 0.7 True None 29.6 2182
+1 night json 0.0 True None 15.6 1059
+1 night plain 0.0 True None 21.4 1240
+1 night json 0.7 True None 18.8 1382
+2 dmn_reason json 0.0 True None 92.7 1349
+2 dmn_reason plain 0.0 False Error code: 500 92.4 0
+2 dmn_reason json 0.7 True None 18.4 1938
+3 night json 0.0 False Error code: 500 92.2 0
+3 night plain 0.0 True None 59.8 1905
+3 night json 0.7 False Error code: 500 92.4 0
+4 night json 0.0 False Error code: 500 93.0 0
+4 night plain 0.0 True None 77.2 1557
+4 night json 0.7 True None 16.4 1145
+5 dmn_reason json 0.0 True None 91.1 2289
+5 dmn_reason plain 0.0 True None 55.0 2587
+5 dmn_reason json 0.7 True None 82.6 2004
+6 dmn_reason json 0.0 True None 90.1 1986
+6 dmn_reason plain 0.0 True None 27.3 2342
+6 dmn_reason json 0.7 True None 60.1 2017
+7 dmn_reason json 0.0 True None 26.2 2087
+7 dmn_reason plain 0.0 True None 28.3 2358
+7 dmn_reason json 0.7 True None 52.2 1843
+8 night json 0.0 True None 28.1 2003
+8 night plain 0.0 True None 24.2 1650
+8 night json 0.7 True None 18.6 1380
+9 night json 0.0 True None 28.7 1178
+9 night plain 0.0 True None 22.1 1462
+9 night json 0.7 True None 17.2 1263
+10 night json 0.0 True None 59.4 1778
+10 night plain 0.0 True None 24.2 2013
+10 night json 0.7 True None 15.0 1393
+11 dmn_reason json 0.0 True None 28.7 2279
+11 dmn_reason plain 0.0 True None 55.4 2070
+11 dmn_reason json 0.7 True None 26.9 2251
+             n  ok        lat      ct
+fmt   temp                           
+json  0.0   12  10  60.744372  1796.5
+      0.7   12  11  22.826487  1618.0
+plain 0.0   12  11  27.812611  1930.0
+spent 1.6046
