@@ -54,13 +54,19 @@ class DmnTpnAgent(BaseAgent):
         else:
             violation = 0.2 if str(top_suspect) == str(prev_majority) else 0.7
         # Threat: wrong-lynch cost grows as village approaches parity.
-        if alive_roles:
-            m = sum(1 for r in alive_roles.values() if r == "mafia")
-            o = max(1, len(alive_roles) - m)
+        # Public information only (P0-E2): roles are never revealed on
+        # death, so the agent may not know how many mafia remain. It knows
+        # the setup (2 mafia) and that the game is not over, which bounds
+        # living mafia by (n_alive - 1) // 2. `alive_roles` is accepted
+        # for call compatibility but its role values are never read.
+        n_alive = len(alive) if alive else (len(alive_roles) if alive_roles else 0)
+        if n_alive:
+            m = min(2, max(1, (n_alive - 1) // 2))
+            o = max(1, n_alive - m)
             threat = min(1.0, m / o)
-            prior_innocent = round(o / len(alive_roles), 3)
+            prior_innocent = round(o / n_alive, 3)
         else:
-            threat = 0.8  # legacy fallback when role counts unavailable
+            threat = 0.8  # legacy fallback when the alive list is unavailable
             prior_innocent = 0.5
         evt = violation * threat
         if "evt" in self.ablate:
