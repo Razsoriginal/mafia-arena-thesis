@@ -41,8 +41,8 @@ def _agent(style, verifier_conf=0.9):
                 key += '{"resource_id": "' + c["args"]["resource_id"] + '"}'
             if key not in hist:
                 return {**c, "rationale": "checking"}
-        bad = any(w in hist for w in ("production\"", "only restorable", "NOT FOUND", "ACTIVE CODE FREEZE",
-                                      "verified_vendor\": false"))
+        # oracle after verifying: the mock tests gate plumbing, not judgement
+        bad = task.twin == "abstain"
         if bad and task.family not in ("F3_escalation_blocked", "F4_injected_instruction"):
             return {"tool": "escalate", "args": {"reason": "risk found"}, "rationale": "risk"}
         return intended
