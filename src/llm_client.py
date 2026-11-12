@@ -6,6 +6,7 @@ instead of silently becoming a safe default.
 """
 import json
 import os
+import random
 import time
 
 from openai import OpenAI
@@ -55,11 +56,46 @@ def _est_cost_inr(prompt_tokens, completion_tokens) -> float:
         return 0.0
 
 
+MAX_ATTEMPTS = 8
+BACKOFF_BASE_S = 10.0
+BACKOFF_CAP_S = 120.0
+_JITTER = random.Random()  # private RNG: never touches game randomness
+
+
+def _error_class(err) -> str:
+    """Coarse class of one failed attempt (P0-R1)."""
+    t = str(err or "").lower()
+    if "empty content" in t:
+        return "empty_content"
+    if "402" in t or "insufficient balance" in t:
+        return "http_402"
+    if "error code: 500" in t:
+        return "http_500"
+    if "error code: 429" in t or "rate limit" in t:
+        return "http_429"
+    if "error code: 5" in t:
+        return "http_5xx"
+    if "connection" in t or "timed out" in t or "timeout" in t:
+        return "connection"
+    if "response_format" in t:
+        return "response_format"
+    return "other"
+
+
+def _backoff_s(attempt: int) -> float:
+    """Sleep before attempt `attempt + 1`: exponential from 10 s, cap 120 s,
+    jittered in [0.5, 1.0] of the nominal value. The smoke 500s were a
+    ~90 s gateway timeout during slow provider windows; the old 2-16 s
+    backoff re-entered the same window."""
+    nominal = min(BACKOFF_CAP_S, BACKOFF_BASE_S * (2 ** attempt))
+    return round(nominal * _JITTER.uniform(0.5, 1.0), 3)
+
+
 def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
              attempt=None, repair: bool = False, escalated: bool = False,
              realised_model=None, purpose=None, prompt_tokens=0,
              completion_tokens=0, cost_inr=0.0, cost_estimated: bool = False,
-             error=None):
+             error=None, latency_s=None, backoff_s=0.0, error_class=None):
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
@@ -81,6 +117,9 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "cost_inr": float(cost_inr or 0.0),
         "cost_estimated": bool(cost_estimated),
         "error": (str(error)[:300] if error else None),
+        "error_class": error_class,
+        "latency_s": (round(float(latency_s), 3) if latency_s is not None else None),
+        "backoff_s": float(backoff_s or 0.0),
         "raw": (raw or "")[:4000],
     })
 
@@ -140,8 +179,13 @@ def chat_text(system: str, user: str, temperature: float | None = None,
     # Retry/repair/escalation behaviour is pilot-consistent and is logged
     # per call (see _log_raw); it is not part of the first-attempt
     # temperature contract. See docs/PREREGISTRATION.md §8.
-    for attempt in range(5):
+    # P0-R1: up to MAX_ATTEMPTS; transient errors back off 10 s * 2^k
+    # (cap 120 s, jittered); every attempt row records latency, the
+    # backoff slept before it, and its error class.
+    backoff = 0.0
+    for attempt in range(MAX_ATTEMPTS):
         escalated = max_tokens != initial_max_tokens
+        t0 = time.time()
         try:
             kwargs = {
                 "model": settings.model,
@@ -179,35 +223,42 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                      escalated=escalated, realised_model=realised,
                      purpose=resolved_purpose, prompt_tokens=pt,
                      completion_tokens=ct, cost_inr=call_cost,
-                     cost_estimated=cost_est)
+                     cost_estimated=cost_est, latency_s=time.time() - t0,
+                     backoff_s=backoff,
+                     error_class=None if text else "empty_content")
             if not text:
                 raise ValueError(f"empty content (max_tokens={max_tokens})")
             return text
         except Exception as e:
-            if "empty content" not in str(e):
+            eclass = _error_class(e)
+            if eclass != "empty_content":
                 _log_raw("chat_text", "", temperature=temp,
                          max_tokens=max_tokens, attempt=attempt, repair=repair,
                          escalated=escalated, realised_model=None,
-                         purpose=resolved_purpose, error=e)
+                         purpose=resolved_purpose, error=e,
+                         latency_s=time.time() - t0, backoff_s=backoff,
+                         error_class=eclass)
             _log_error("chat_text", e, temperature=temp,
                        max_tokens=max_tokens, attempt=attempt)
-            text_err = str(e).lower()
-            if "402" in text_err or "insufficient balance" in text_err:
+            if eclass == "http_402":
                 # Never retry a payment failure: it silently turns every
                 # remaining game into a fallback-delay draw.
                 raise BillingExhausted(str(e)) from e
-            if use_format and "response_format" in text_err:
+            if use_format and eclass == "response_format":
                 use_format = None  # provider without JSON mode: retry plain
+                backoff = 0.0
                 continue
-            if "empty content" in str(e) and max_tokens < 4000:
+            if eclass == "empty_content" and max_tokens < 4000:
                 # Reasoning models can spend the whole budget before answering.
                 # Logged via escalated=True on the next attempt's raw record.
                 max_tokens = min(4000, max_tokens + 1000)
                 COST_LOG["escalations"] = COST_LOG.get("escalations", 0) + 1
+                backoff = 0.0
                 continue
-            if attempt == 4:
+            if attempt == MAX_ATTEMPTS - 1:
                 return ""
-            time.sleep(min(16, 2 ** (attempt + 1)))
+            backoff = _backoff_s(attempt)
+            time.sleep(backoff)
     return ""
 
 
