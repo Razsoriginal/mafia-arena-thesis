@@ -8,7 +8,7 @@ No proprietary code/data. Primary backbone: AiCredits only — `AiCredits_Base_U
 Docs: `TRACKER.md` (live status: done/metrics/next/improvement), `SYNOPSIS.md` (university synopsis), `DESIGN.md` (architecture), `README.md` (quickstart), `ROADMAP.md` (phases), `docs/related_work.md` (Ch.2), `docs/enterprise_integration.md` (safety framework), `docs/guide_slide.*` (1-slide).
 Code: `src/mafia/` engine, `src/agents/` DMN/TPN + baselines + `jev_gate.py`, `src/safety/` gate/middleware/audit, `src/eval/` arena runner + metrics + `evaluate.py` + `dashboard.py` (`streamlit run src/eval/dashboard.py`). Logs: `logs/games.parquet` (tokens, `est_cost_inr`, `billed_cost_inr`, `jev_stub`, `model`, `git_sha`) + `logs/runs/<run_tag>/` (manifest + games/votes/trust + raw traces/LLM logs) + `logs/progress.jsonl` + `logs/safety_audit.parquet` (legacy `logs/raw/` stays).
 
-Current status (2026-11-04): 14 clean pilot games, tau 0.35, ECE 0.105, 1 JSON failure, Rs.30.92. Next: 200-game MVP, 20-game ablations, 10-game Jev run. Details in `TRACKER.md`.
+Current status (2026-11-12): pre-reg team MVP implemented with 116 passing tests; canonical dataset remains the 14-game pilot (ECE 0.105, 1 JSON failure, Rs.30.92). First live team smoke `smoke-team-01` (10 games, 2/3 trios, Rs.19.50) surfaced 15 JSON failures (1.5/game), a blocker for the 20-trio calibration batch. Freeze block still PENDING; no confirmatory games. Next: triage smoke failures, freeze, calibration. Details in `TRACKER.md`.
 
 ## How to work in opencode terminal
 - Default model is muse-spark-1.3-contributor-free. Keep responses short, factual, no emojis unless asked.

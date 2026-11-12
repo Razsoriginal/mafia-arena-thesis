@@ -3,15 +3,18 @@
 Backbone: `AiCredits_Model` (default `meta/muse-spark-1.3-contributor`) via AiCredits `https://aicredits.in/v1` (System-2 DMN/TPN). Jev gate: OpenRouter only — `OpenRouterJevAPIKey` + `OpenRouterJevModel` (`typesafe/jev-1.14`) — `--gate llm|jev`. Night actions: `--night llm|scripted` (default llm).
 Rule: one variable per iteration. Every claim needs `logs/*.parquet` evidence.
 
-## Current position (2026-11-06)
-**Pilot complete. Pre-registered team-design MVP implemented, awaiting smoke approval.**
+## Current position (2026-11-12)
+**Pilot complete. Pre-registered team-design MVP implemented (116 tests). First live team smoke ran; calibration is blocked on JSON-failure triage.**
 - Design 3 is confirmatory: village team vs fixed CoT mafia. See [docs/PREREGISTRATION.md](./docs/PREREGISTRATION.md).
 - Confirmatory arms: `dmn_village`, `cot_village`, `cotx3_village` (184 seed-trios planned, n re-decided after 20-trio calibration). Null arms: `random_village`, `majority_village`.
-- Budget: Rs.2,000 hard cap (**assumed**), Rs.400 reserve, Rs.1,600 usable. Costs stay **assumed** until the calibration batch measures them.
+- Budget: Rs.2,000 hard cap (**assumed**), Rs.400 reserve, Rs.1,600 usable. Measured spend Rs.50.42 (pilot Rs.30.92 + smoke Rs.19.50). Costs stay **assumed** until the calibration batch measures them.
 - Vote samples in every arm run at 0.7. Reasoning, night actions, and the trust probe run at 0.0. Tau frozen at 0.35.
 - Clean canonical pilot dataset remains: **14 games** (`logs/runs/pilot-clean-02/` + `pilot-clean-03/`),
   1 JSON failure, Rs.30.92 (~Rs.2.2/game), **measured**.
 - Calibration: **ECE 0.105 / Brier 0.193** (n=41); say-do gap 0.0 (n=3 focal lynch votes).
+- `smoke-team-01` (2026-11-11, code `bc80015`): 10 games, 2/3 trios, Rs.19.50, `--no-canonical`.
+  It surfaced **15 JSON failures / 10 games (1.5/game)**; fix this before the 20-trio calibration batch.
+- Freeze block is still `PENDING`; `--confirmatory` refuses to start.
 - Win-rate superiority is **not established** at n=14. Focal-seat results are appendix history.
 - Track live status and evidence in [`TRACKER.md`](./TRACKER.md).
 
@@ -24,12 +27,12 @@ Rule: one variable per iteration. Every claim needs `logs/*.parquet` evidence.
 Exit: 5 clean games, JSON failures fall back to `no-lynch`, timeouts recorded as `"draw"`, no crashes.
 
 ## Phase 1 — MVP (pre-registered, team design)
-- Smoke (needs approval): Rs.40 pipeline smoke from `docs/PREREGISTRATION.md`, then the 20-trio calibration batch.
+- Smoke: `smoke-team-01` ran 2026-11-11 (10 games, 2/3 trios, Rs.19.50). Triage its 15 JSON failures before spending on the 20-trio calibration batch.
 - Confirmatory command shape: `python -m src.eval.run_arena --design team --arms dmn_village,cot_village,cotx3_village --games 184 --seed 5000 --tau 0.35 --confirmatory --budget-cap 1600 --workers 6`
   Games run seed-major in trios. Cumulative billed cost aborts after the current trio.
 - Null benchmarks: `random_village` and `majority_village` on the first 80 seeds. No LLM calls from village seats.
 - Same backbone for all (`meta/muse-spark-1.3-contributor`). Engine frozen during confirmatory games.
-- **Status:** implementation and mocked tests complete on `prereg-mvp`. No confirmatory or smoke game has run in Phase 4.
+- **Status:** implementation and 116 unit tests complete on `prereg-mvp`. The first live team smoke ran (`smoke-team-01`), but its JSON-failure rate blocks calibration; no confirmatory game has run. Freeze block still `PENDING`.
 Exit: locked primary dataset, primary estimate/test under the pre-registered wording, calibration batch report.
 
 ## Phase 2 — Measure + Improve (Weeks 7-10)
