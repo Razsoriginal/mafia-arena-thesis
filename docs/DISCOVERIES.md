@@ -91,3 +91,28 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The hidden-role leak (D-004) affected the trust prior, not these fields.
   - A "contradiction" may cut either way.
 - **Paid replication needed?** No new run. The confirmatory DMN traces will contain the same fields. A pre-specified within-DMN replication (the same AUCs and the paired difference) is added to the post-lock exploratory plan. It is run only after `primary-locked`, because it uses the outcome labels of confirmatory games.
+
+## D-006. Games are short because most days fail to reach a strict majority while nights keep killing. The day cap rarely binds.
+
+- **Question.** Why are games short, and would a cell with a 7-day cap help?
+- **Data.** Histories of 106 non-confirmatory games across 11 campaigns (`logs/runs/*/raw/history_*.parquet`), pooled with no arm comparison. Output: `logs/explore/d006_game_length.json`. Code: `src/explore/game_length.py`.
+- **Result** (**measured**, pooled):
+
+  | Quantity | Value |
+  |---|---|
+  | Mean day-votes per game | 2.95 |
+  | Days ending in no lynch | 53% |
+  | Lynches per game | 1.39 |
+  | Lynches that hit an innocent | 44% |
+  | Games with a night-0 kill | 80% |
+  | Doctor save rate per night | 33% |
+  | Winners | mafia 59%, village 38%, draw 3% |
+  | Games that hit the 5-day cap | 3 of 106 |
+
+- **Reading.**
+  - With both mafia alive, three innocent removals (night kills plus wrongful lynches) end the game.
+  - Lynching needs 4 of 6 or 7 votes, and the mafia supply 2 of them, so the village must coordinate 4 of its 5 seats. On most days it does not.
+  - The cap is almost never binding. **A 7-day-cap cell is not recommended:** it would change at most about 3% of games.
+  - The pilot's "2.14 days" in TRACKER is a zero-based index. The count convention gives about 3.
+- **Confidence.** High for the pooled mechanics. Code versions are mixed (the pre-P0-E1 parity day inflates length slightly).
+- **Paid replication needed?** No.
