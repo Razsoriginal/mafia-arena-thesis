@@ -566,6 +566,10 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 game.add("engine", f"Night: Player {res['killed']} was killed.", f"night-{day}")
             else:
                 game.add("engine", "Night: No one died (saved).", f"night-{day}")
+        # A night kill that reaches parity ends the game immediately (P0-E1):
+        # standard Mafia rules, and no wasted day of calls or rows.
+        if game.check_over():
+            break
         # reason BEFORE discussion: the DMN/TPN plan (cached per day) informs speech
         alive = game.alive_ids()
         alive_roles = {p.pid: p.role for p in game.alive()}
