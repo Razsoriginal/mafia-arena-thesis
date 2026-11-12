@@ -13,6 +13,12 @@ class TestPilotRegression(unittest.TestCase):
 
         tdf = pd.read_parquet("logs/trust.parquet")
         vdf = pd.read_parquet("logs/votes.parquet")
+        # Canonical files also hold campaign rows; the pilot rows predate the
+        # campaign column, so they are exactly the rows with no campaign.
+        if "campaign" in tdf.columns:
+            tdf = tdf[tdf["campaign"].isna()]
+        if "campaign" in vdf.columns:
+            vdf = vdf[vdf["campaign"].isna()]
         pairs = [(float(t), 0 if bool(m) else 1) for t, m in zip(tdf["trust"], tdf["target_is_mafia"])]
         self.assertEqual(len(pairs), 41)
         self.assertAlmostEqual(ece(pairs), 0.105, places=3)
