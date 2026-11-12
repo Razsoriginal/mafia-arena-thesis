@@ -787,10 +787,36 @@ def _budget_exceeded(rows, cap) -> bool:
     return cap is not None and _cumulative_cost(rows) > float(cap)
 
 
+def _default_ledger_path(start=None) -> str:
+    """One absolute ledger shared by every worktree of this repository.
+
+    Resolves the main checkout through git's common dir, so a run from a
+    worktree spends against the same ledger as a run from the main tree
+    (Pre-reg SS9 amendment v2). Falls back to the repo containing this
+    file when git is unavailable.
+    """
+    start = start or os.path.dirname(os.path.abspath(__file__))
+    root = None
+    try:
+        common = subprocess.check_output(
+            ["git", "rev-parse", "--path-format=absolute", "--git-common-dir"],
+            cwd=start, text=True, stderr=subprocess.DEVNULL).strip()
+        if common:
+            root = os.path.dirname(os.path.normpath(common))
+    except Exception:
+        root = None
+    if not root:
+        root = os.path.normpath(os.path.join(os.path.dirname(os.path.abspath(__file__)), "..", ".."))
+    return os.path.join(root, "logs", "spend_ledger.jsonl")
+
+
 def _ledger_path(args=None) -> str:
     if args is not None and getattr(args, "spend_ledger", None):
-        return args.spend_ledger
-    return os.getenv("MAFIA_SPEND_LEDGER", "logs/spend_ledger.jsonl")
+        return os.path.abspath(args.spend_ledger)
+    env = os.getenv("MAFIA_SPEND_LEDGER", "").strip()
+    if env:
+        return os.path.abspath(env)
+    return _default_ledger_path()
 
 
 def _pending_path(args=None) -> str:
@@ -893,7 +919,8 @@ def _ledger_total(path: str) -> float:
         return float(sum(float(r.get("cost_inr") or 0) for r in _ledger_entries(path)))
 
 
-def _append_ledger(path: str, row: dict, campaign: str = "", status: str = "kept"):
+def _append_ledger(path: str, row: dict, campaign: str = "", status: str = "kept",
+                   source: str = "run_arena"):
     """Append one completed game's spend (F1/G5). Never rewrites history.
 
     A billed game that is re-run after an interrupted trio is real spend
@@ -930,9 +957,60 @@ def _append_ledger(path: str, row: dict, campaign: str = "", status: str = "kept
             "cost_fallback_est": bool(used_fallback),
             "status": status,
             "attempt": len(prior) + 1,
+            "source": source,
         }
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
+
+
+def _raw_spend(raw_dir: str) -> float:
+    """Every billed (or estimated) attempt in a task's raw log, in Rs.
+
+    llm_client writes one raw row per underlying attempt, including the
+    attempts of a game that later crashed or was retried in the worker,
+    so this is the most complete spend record for a task.
+    """
+    total = 0.0
+    if not raw_dir or not os.path.isdir(raw_dir):
+        return 0.0
+    for dirpath, _dirs, files in os.walk(raw_dir):
+        for name in files:
+            if name != "llm_raw.jsonl":
+                continue
+            with open(os.path.join(dirpath, name), encoding="utf-8") as f:
+                for line in f:
+                    if not line.strip():
+                        continue
+                    try:
+                        total += float(json.loads(line).get("cost_inr") or 0)
+                    except Exception:
+                        continue
+    return total
+
+
+def _reconcile_task_spend(path: str, raw_dir: str, run_tag: str, campaign: str,
+                          game_id: str, requested_seed=None, arm=None) -> float:
+    """Ledger any raw-logged spend for this task that no ledger row covers.
+
+    Covers a game that crashed (no row), the first attempt of an
+    in-worker retry, and a partial game cut by a 402. The difference is
+    appended as status=discarded, source=raw-reconcile. Never negative,
+    never rewrites. Returns the Rs. added.
+    """
+    if not path:
+        return 0.0
+    raw_total = _raw_spend(raw_dir)
+    with _ledger_lock(path):
+        ledgered = sum(float(r.get("cost_inr") or 0) for r in _ledger_entries(path)
+                       if r.get("run_tag") == run_tag and r.get("game_id") == game_id)
+    gap = round(raw_total - ledgered, 6)
+    if gap <= 1e-6:
+        return 0.0
+    _append_ledger(path, {"run_tag": run_tag, "campaign": campaign,
+                          "game_id": game_id, "requested_seed": requested_seed,
+                          "arm": arm, "billed_cost_inr": gap, "est_cost_inr": gap},
+                   campaign=campaign, status="discarded", source="raw-reconcile")
+    return gap
 
 
 def _load_pending(path: str) -> list:
@@ -1028,11 +1106,20 @@ def _probe_cost_from_raw(raw_root: str, n_games: int):
     return round(total / n_games, 6) if found else None
 
 
-def _projected_trio_cost(kept_rows, planned_trio_cost: float) -> float:
-    """max(planned, mean measured kept trio cost so far) (G4)."""
+def _projected_trio_cost(kept_rows, planned_trio_cost: float, campaign=None) -> float:
+    """max(planned, mean measured kept trio cost so far) (G4).
+
+    Scoped to one campaign when given, and seedless rows (backfills) never
+    count, so pilot or smoke trios with other arm sets cannot distort the
+    projection.
+    """
     seeds = {}
     for r in kept_rows or []:
         if r.get("ledger_status") == "discarded":
+            continue
+        if r.get("requested_seed") is None:
+            continue
+        if campaign is not None and r.get("campaign") not in (None, campaign):
             continue
         seeds.setdefault(r.get("requested_seed"), 0.0)
         seeds[r.get("requested_seed")] += _effective_cost(r)
@@ -1115,6 +1202,20 @@ def _calibration_report(rows, votes_rows, trust_rows,
                                      for k, (t, m) in probe_miss.items()},
         "probe_cost_per_game_inr": probe_cost_per_game,
     }
+
+
+def _reconcile_trio(trio, ledger_path, run_dir, campaign):
+    """Raw-reconcile every task of a trio, finished or not (Pre-reg SS9 v2)."""
+    for t in trio:
+        try:
+            _reconcile_task_spend(
+                ledger_path, raw_dir=os.path.join(run_dir, "raw", f"task-{t['run_id']}"),
+                run_tag=t["run_tag"], campaign=campaign, game_id=t["run_id"],
+                requested_seed=t.get("requested_seed"), arm=t.get("arm"))
+        except RuntimeError:
+            raise  # corrupt ledger is fatal
+        except Exception as e:
+            print(f"[{t.get('run_tag')}] spend reconcile failed for {t['run_id']}: {e}")
 
 
 def _run_one_with_retry(task, runner=None):
@@ -1413,11 +1514,15 @@ def main():
             # In-flight projection (G4): never start a trio the cap
             # cannot cover on projected cost (ledger history + this run).
             hist = [{"requested_seed": e.get("requested_seed"),
+                     "campaign": e.get("campaign"),
                      "billed_cost_inr": e.get("cost_inr"),
                      "ledger_status": e.get("status")}
                     for e in _ledger_entries(ledger_path)]
-            projected = _projected_trio_cost(hist + rows,
-                                             getattr(args, "planned_trio_cost", 8.13))
+            # rows from this invocation are already in the ledger (kept),
+            # so hist alone is the campaign's measured history.
+            projected = _projected_trio_cost(hist,
+                                             getattr(args, "planned_trio_cost", 8.13),
+                                             campaign=campaign)
             ledger_now = _ledger_total(ledger_path)
             if ledger_now + projected > float(getattr(args, "budget_cap", 1600.0)):
                 print(f"[{run_tag}] BUDGET projection Rs.{ledger_now:.2f} + "
@@ -1467,6 +1572,7 @@ def main():
                 for r in results:
                     _record_result(r, args, run_dir, rows, canonical=False,
                                    ledger_path=ledger_path, campaign=campaign)
+                _reconcile_trio(trio, ledger_path, run_dir, campaign)
                 _mark_pending(pending_path, campaign, seed0, arm_names,
                               "billing_exhausted" if billing_hit else "worker_failure")
                 print(f"[{run_tag}] trio {seed0} pending "
@@ -1479,6 +1585,7 @@ def main():
             for r in results:
                 _record_result(r, args, run_dir, rows, canonical=True,
                                ledger_path=ledger_path, campaign=campaign)
+            _reconcile_trio(trio, ledger_path, run_dir, campaign)
             _clear_pending(pending_path, campaign, seed0)
             if _ledger_total(ledger_path) > float(getattr(args, "budget_cap", 1600.0)):
                 print(f"[{run_tag}] BUDGET CAP Rs.{args.budget_cap} exceeded "
