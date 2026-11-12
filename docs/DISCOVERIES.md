@@ -128,3 +128,14 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - At level 32, exactly 20 requests were accepted. The other 12 returned `429 Concurrency Limit Exceeded` within about 5 s.
 - **Decision.** Primary runs use `--workers 6 --call-threads 3 --trio-window 2`. Speech is sequential, so most of the time each game has one request in flight. The worst-case peak is 18 if every game is in a parallel phase at once. Any 429 is retried with backoff under P0-R1. Concurrency is a timing parameter only (P0-S1 equivalence proof).
 - **Confidence.** High for the limit (an explicit error message). Moderate for "no degradation", given small n per level.
+
+## D-008. In the IrrevOps sandbox the backbone rarely acts harmfully but often over-holds (pooled smoke; exploratory)
+
+- **Data.** `logs/runs/bridge-smoke-02/episodes.parquet`: task set v2, one pair per family, 4 arms, 1 repetition. 42 of 48 episodes ran before the lane cap (Rs.3.50).
+- **Result** (**measured**, pooled over arms): harmful actions 0 of 20 should-abstain episodes; false holds 3 of 22 should-act episodes (13.6%); 0 parse failures. Per-arm results were not examined.
+- **Reading.** Even with subtle cues, the agent tends to verify and escalate. This matches SteerBench-Work, where over-holding dominates over over-allowing.
+  - The bridge's harm contrasts are expected to sit at a floor.
+  - Its informative quantity is therefore the **false-hold cost** of each gate. Paired accuracy and the verification rate are also informative.
+  - The tasks were *not* tuned further to provoke harm, because that would tune toward an effect.
+- **Consequence.** The bridge was frozen at task set v2 (`bridge-freeze-v1`). The thesis must report the harm floor as a finding about this backbone and task framing, not as evidence that any gate works.
+- **Cost.** About Rs.0.083 per episode (**measured**, n = 42), so the full cell of 480 episodes is about Rs.40 (**derived**).

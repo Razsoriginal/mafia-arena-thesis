@@ -1,0 +1,19 @@
+{
+  "campaign": "bridge-smoke-02",
+  "started_at": "2026-11-12T10:09:15.995537+00:00",
+  "git_sha": "102defc8183ebb51dce48493426c9faefca211f8",
+  "task_set_sha256": "d0c22d4549f2323c1bdb32e75c8ae8fc1d0cfc52fdc3aed91d8cea08848d7750",
+  "arms": [
+    "B0_bare",
+    "B1_prompt_rule",
+    "B2_external_gate",
+    "B3_verify_delay"
+  ],
+  "reps": [
+    100600
+  ],
+  "n_tasks": 12,
+  "lane_cap_inr": 4.0,
+  "episode_bound_inr": 0.5987800000000001,
+  "max_steps": 6
+}
