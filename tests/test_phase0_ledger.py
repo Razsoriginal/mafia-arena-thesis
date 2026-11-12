@@ -125,5 +125,23 @@ class TestLedgerSource(unittest.TestCase):
             self.assertEqual(run_arena._ledger_entries(ledger)[0]["source"], "run_arena")
 
 
+
+class TestManifestHasNoHomePath(unittest.TestCase):
+    def test_manifest_ledger_path_is_repo_relative(self):
+        from tests.test_manifest_assertions import _args
+
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "manifest.json")
+            old = os.environ.pop("MAFIA_SPEND_LEDGER", None)
+            try:
+                run_arena._write_manifest(p, _args(), "t", "abc")
+            finally:
+                if old is not None:
+                    os.environ["MAFIA_SPEND_LEDGER"] = old
+            m = json.load(open(p))
+        self.assertEqual(m["spend_ledger"], "logs/spend_ledger.jsonl")
+        self.assertNotIn(os.path.expanduser("~"), json.dumps(m))
+
+
 if __name__ == "__main__":
     unittest.main()
