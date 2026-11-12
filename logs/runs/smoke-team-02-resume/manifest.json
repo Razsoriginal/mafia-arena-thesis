@@ -1,0 +1,109 @@
+{
+  "run_tag": "smoke-team-02-resume",
+  "started_at": "2026-11-12T09:59:48.653205+00:00",
+  "git_sha": "60efde2",
+  "args": {
+    "games": 5,
+    "agents": "dmn_tpn,cot",
+    "design": "team",
+    "arms": "dmn_village,cot_village,cotx3_village,random_village,majority_village",
+    "seed": 100000,
+    "gate": "llm",
+    "night": "llm",
+    "focal_role": "random",
+    "run_tag": "smoke-team-02-resume",
+    "max_days": 5,
+    "trio_window": 2,
+    "call_threads": 4,
+    "workers": 4,
+    "tau": 0.35,
+    "tau_sweep": null,
+    "ablate": "",
+    "budget_cap": 79.01,
+    "calibration_trios": 20,
+    "campaign": "smoke-team-02",
+    "start_trio": 0,
+    "trios": 2,
+    "planned_trios": 184,
+    "resume": true,
+    "calibration": false,
+    "spend_ledger": null,
+    "pending_file": null,
+    "calibration_go": null,
+    "calibration_report": null,
+    "planned_trio_cost": 10.0,
+    "confirmatory": false,
+    "no_canonical": false,
+    "out": "logs/runs/smoke-team-02/canon/games.parquet"
+  },
+  "design": "team",
+  "arm_map": {
+    "dmn_village": {
+      "village": "dmn_tpn",
+      "mafia": "cot"
+    },
+    "cot_village": {
+      "village": "cot",
+      "mafia": "cot"
+    },
+    "cotx3_village": {
+      "village": "cotx3",
+      "mafia": "cot"
+    },
+    "random_village": {
+      "village": "random_voter",
+      "mafia": "cot"
+    },
+    "majority_village": {
+      "village": "majority_follower",
+      "mafia": "cot"
+    }
+  },
+  "arms": "dmn_village,cot_village,cotx3_village,random_village,majority_village",
+  "probe_enabled": true,
+  "prompt_hash": "d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc",
+  "prompts_sha256": "d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc",
+  "runpath_sha256": "3fca1ecb5802dce0f7a2ade29e1c08f990a2c2eba0261d7b6e9182566e49d869",
+  "campaign": "smoke-team-02",
+  "planned_trios": 184,
+  "start_trio": 0,
+  "trios": 2,
+  "spend_ledger": "logs/spend_ledger.jsonl",
+  "budget_cap_inr": 79.01,
+  "planned_trio_cost_inr": 10.0,
+  "effective_tau": 0.35,
+  "git_status_summary": {
+    "n_dirty": 4,
+    "entries": [
+      " M logs/progress.jsonl",
+      " M logs/spend_ledger.jsonl",
+      "?? logs/runs/smoke-team-02.out",
+      "?? logs/runs/smoke-team-02/"
+    ]
+  },
+  "dirty_runpath": [],
+  "calibration_trios": 20,
+  "trio_window": 2,
+  "call_threads": 4,
+  "confirmatory": false,
+  "llm": {
+    "provider": "aicredits",
+    "base_url": "https://aicredits.in/v1",
+    "model": "meta/muse-spark-1.3-contributor",
+    "max_tokens": 2500,
+    "temperature_dialogue": 0.3,
+    "temperature_json": 0.0,
+    "vote_temperature": 0.7
+  },
+  "jev": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "typesafe/jev-1.14",
+    "key_present": true,
+    "min_interval_s": 0.0,
+    "threshold": 0.6
+  },
+  "thresholds": {
+    "tau_delay": 0.35,
+    "evt_threshold": 0.6
+  }
+}

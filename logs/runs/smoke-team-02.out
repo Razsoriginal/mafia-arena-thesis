@@ -1,0 +1,25 @@
+[smoke-team-02] smoke-team-02-100000-dmn_village: village in 3 days role=doctor json_failures=0
+[smoke-team-02] smoke-team-02-100000-cot_village: village in 4 days role=doctor json_failures=0
+[smoke-team-02] smoke-team-02-100000-cotx3_village: mafia in 2 days role=doctor json_failures=0
+[smoke-team-02] smoke-team-02-100000-random_village: mafia in 3 days role=doctor json_failures=0
+[smoke-team-02] smoke-team-02-100000-majority_village: mafia in 3 days role=doctor json_failures=0
+[smoke-team-02] smoke-team-02-100100-dmn_village: mafia in 2 days role=villager json_failures=0
+[smoke-team-02] smoke-team-02-100100-cot_village: village in 3 days role=villager json_failures=0
+[smoke-team-02] smoke-team-02-100100-cotx3_village: village in 3 days role=villager json_failures=0
+[smoke-team-02] smoke-team-02-100100-random_village: mafia in 3 days role=villager json_failures=0
+[smoke-team-02] smoke-team-02-100100-majority_village: mafia in 4 days role=villager json_failures=0
+
+Saved 10 rows to logs/runs/smoke-team-02/canon/games.parquet and logs/runs/smoke-team-02/games.parquet
+focal             winner   focal_role
+dmn_village       village  doctor        1
+cot_village       village  doctor        1
+cotx3_village     mafia    doctor        1
+random_village    mafia    doctor        1
+majority_village  mafia    doctor        1
+dmn_village       mafia    villager      1
+cot_village       village  villager      1
+cotx3_village     village  villager      1
+random_village    mafia    villager      1
+majority_village  mafia    villager      1
+Name: count, dtype: int64
+Run bundle: logs/runs/smoke-team-02
