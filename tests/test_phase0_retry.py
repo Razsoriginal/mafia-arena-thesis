@@ -100,5 +100,44 @@ class TestRetryTiming(unittest.TestCase):
         self.assertEqual(c("empty content (max_tokens=2500)"), "empty_content")
 
 
+
+class TestTimeoutDropsJsonMode(unittest.TestCase):
+    """P0-R2: after an http_500 (gateway timeout) on a JSON-mode call, the
+    retry is sent without response_format (same prompt and temperature).
+    Diagnostic: JSON at t=0.0 was slower than plain on 9/12 paired prompts
+    (logs/runs/loadtest-500diag/calls.jsonl)."""
+
+    def setUp(self):
+        self._td = tempfile.mkdtemp(prefix="mafia-retry2-")
+        self._old = os.environ.get("MAFIA_RAW_DIR")
+        os.environ["MAFIA_RAW_DIR"] = self._td
+        llm_client._client = None
+
+    def tearDown(self):
+        if self._old is None:
+            os.environ.pop("MAFIA_RAW_DIR", None)
+        else:
+            os.environ["MAFIA_RAW_DIR"] = self._old
+        llm_client._client = None
+
+    def test_second_attempt_has_no_response_format(self):
+        seen = []
+
+        def create(**kw):
+            seen.append(("response_format" in kw, kw["temperature"], kw["messages"]))
+            if len(seen) == 1:
+                raise _Err("Error code: 500")
+            return _resp('{"vote": "1"}')
+
+        with patch.object(llm_client, "get_client") as gc, \
+                patch.object(llm_client.time, "sleep", lambda s: None):
+            gc.return_value.chat.completions.create.side_effect = create
+            out = llm_client.chat_json("sys", "user", temperature=0.0, purpose="night")
+        self.assertEqual(out, {"vote": "1"})
+        self.assertEqual([s[0] for s in seen], [True, False])
+        self.assertEqual(seen[0][1], seen[1][1])
+        self.assertEqual(seen[0][2], seen[1][2])
+
+
 if __name__ == "__main__":
     unittest.main()
