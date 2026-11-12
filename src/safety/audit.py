@@ -7,8 +7,10 @@ class AuditLogger:
         self.path = path
         self.rows = []
 
-    def log(self, action: ProposedAction, result: GateResult, outcome: str = ""):
+    def log(self, action: ProposedAction, result: GateResult, outcome: str = "", **extra):
+        import time as _t
         self.rows.append({
+            "ts": _t.time(), **{k: (str(v) if isinstance(v, (dict, list)) else v) for k, v in extra.items()},
             "action": action.action, "target": action.target, "actor": action.actor,
             "reversible": action.reversible, "decision": result.decision,
             "noul": result.should_delay_noul, "threat": result.threat_score,

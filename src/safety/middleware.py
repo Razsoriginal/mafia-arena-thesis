@@ -28,13 +28,17 @@ def guard_tool(gate, action: ProposedAction, fn, logger: AuditLogger | None = No
     """Imperative form for LangChain / OpenAI tool calls:
     out = guard_tool(gate, ProposedAction(action='refund', ...), lambda: refund(order_id))
     """
-    from .gate import SafetyGate
-    assert isinstance(gate, SafetyGate)
-    # allow caller-supplied trust/violation/threat via gw
+    if not hasattr(gate, "check"):
+        raise TypeError("gate must provide check(action, **kw) -> GateResult")
+    # allow caller-supplied trust/violation/threat via gw (SafetyGate);
+    # deterministic policy gates ignore them.
     res = gate.check(action, trust=gw.get("trust", 0.5),
                      violation=gw.get("violation", 0.0), threat=gw.get("threat"))
-    if logger:
-        logger.log(action, res)
     if res.decision in ("DELAY", "ESCALATE"):
+        if logger:
+            logger.log(action, res, outcome="blocked", **gw.get("audit", {}))
         return {"status": res.decision, "gate": res.__dict__}
-    return {"status": "ALLOW", "gate": res.__dict__, "result": fn()}
+    out = fn()
+    if logger:
+        logger.log(action, res, outcome=str(out)[:200], **gw.get("audit", {}))
+    return {"status": "ALLOW", "gate": res.__dict__, "result": out}

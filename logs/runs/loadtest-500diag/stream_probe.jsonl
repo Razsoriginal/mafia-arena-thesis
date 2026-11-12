@@ -1,0 +1,1 @@
+{"idx": "2", "max_tokens": 4000, "latency": 39.5, "chunks": 112, "reasoning_chunks": 2, "first_any_s": 39.428614377975464, "first_content_s": 39.4347665309906, "pt": 2478, "ct": 1731, "cost": 0.06438876995628001, "err": null}

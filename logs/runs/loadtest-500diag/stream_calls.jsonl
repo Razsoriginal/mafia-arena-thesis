@@ -1,0 +1,1 @@
+{"ok": true, "error": null, "latency_s": 35.76024889945984, "first_content_s": 35.73098874092102, "pt": 2478, "ct": 2276, "cost_inr": 0.07620421764186001, "billed": true, "usage_present": true, "model": "meta/muse-spark-1.3-contributor", "content_len": 1574, "i": 2, "purpose": "dmn_reason", "fmt": "plain", "temp": 0.0, "stream": true, "ts": 1794473779.5018022}
