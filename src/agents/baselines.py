@@ -30,10 +30,16 @@ class CotX3Agent(BaseAgent):
         return llm.chat_text(P.DIALOGUE_SYSTEM, P.dialogue_user(self.pid, role, history), purpose="speak")
     def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         samples, fails, reasons = [], [], []
-        for _ in range(3):
+
+        # The 3 samples are independent draws on the same prompt:
+        # concurrent (P0-S1), results kept in sample order.
+        def _sample(_i):
             meta = {}
             d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust),
                               meta=meta, temperature=settings.vote_temperature, purpose="vote")
+            return d, meta
+
+        for d, meta in llm.pmap(_sample, range(3)):
             fails.append(bool(meta.get("parse_fail")))
             samples.append(str(d["vote"]) if d.get("vote") is not None else None)
             reasons.append(str(d.get("reason", "")))

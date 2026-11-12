@@ -7,7 +7,9 @@ instead of silently becoming a safe default.
 import json
 import os
 import random
+import threading
 import time
+from concurrent.futures import ThreadPoolExecutor
 
 from openai import OpenAI
 
@@ -27,15 +29,45 @@ COST_LOG = {
 }
 
 
+_LOCK = threading.Lock()  # COST_LOG, raw-log appends, client init (P0-S1)
+
+
+def _bump(key: str, value=1):
+    with _LOCK:
+        COST_LOG[key] = COST_LOG.get(key, 0) + value
+
+
+def call_threads() -> int:
+    """Intra-game call concurrency (P0-S1). Timing only; see
+    tests/test_phase0_concurrency.py for the equivalence proof."""
+    try:
+        return max(1, int(os.getenv("MAFIA_CALL_THREADS", "1")))
+    except ValueError:
+        return 1
+
+
+def pmap(fn, items):
+    """Order-preserving map over independent calls. Sequential at 1
+    thread; the first exception (e.g. BillingExhausted) propagates."""
+    items = list(items)
+    n = min(call_threads(), len(items))
+    if n <= 1:
+        return [fn(x) for x in items]
+    with ThreadPoolExecutor(max_workers=n) as ex:
+        return list(ex.map(fn, items))
+
+
 def _raw_dir() -> str:
     return os.getenv("MAFIA_RAW_DIR", "logs/raw")
 
 
 def _log_jsonl(name: str, payload: dict):
     try:
-        os.makedirs(_raw_dir(), exist_ok=True)
-        with open(os.path.join(_raw_dir(), name), "a", encoding="utf-8") as f:
-            f.write(json.dumps(payload, default=str) + "\n")
+        line = json.dumps(payload, default=str) + "\n"
+        with _LOCK:
+            os.makedirs(_raw_dir(), exist_ok=True)
+            with open(os.path.join(_raw_dir(), name), "a", encoding="utf-8") as f:
+                f.write(line)
     except Exception:
         pass
 
@@ -159,7 +191,9 @@ def _reasoning(resp) -> str:
 def get_client():
     global _client
     if _client is None:
-        _client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
+        with _LOCK:
+            if _client is None:
+                _client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
     return _client
 
 
@@ -197,17 +231,17 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             if use_format:
                 kwargs["response_format"] = use_format
             resp = client.chat.completions.create(**kwargs)
-            COST_LOG["calls"] += 1
+            _bump("calls")
             pt = ct = 0
             billed = None
             try:
                 pt = int(resp.usage.prompt_tokens or 0)
                 ct = int(resp.usage.completion_tokens or 0)
-                COST_LOG["prompt_tokens"] += pt
-                COST_LOG["completion_tokens"] += ct
+                _bump("prompt_tokens", pt)
+                _bump("completion_tokens", ct)
                 billed = getattr(resp.usage, "cost", None)
                 if billed is not None:
-                    COST_LOG["cost_inr"] += float(billed)
+                    _bump("cost_inr", float(billed))
             except Exception:
                 pass
             realised = getattr(resp, "model", None)
@@ -252,7 +286,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                 # Reasoning models can spend the whole budget before answering.
                 # Logged via escalated=True on the next attempt's raw record.
                 max_tokens = min(4000, max_tokens + 1000)
-                COST_LOG["escalations"] = COST_LOG.get("escalations", 0) + 1
+                _bump("escalations")
                 backoff = 0.0
                 continue
             if attempt == MAX_ATTEMPTS - 1:
@@ -304,7 +338,7 @@ def chat_json(system: str, user: str, meta: dict | None = None,
     if meta is not None:
         meta["raw_len"] = len(raw)
     if not raw.strip():
-        COST_LOG["json_failures"] += 1
+        _bump("json_failures")
         if meta is not None:
             meta.update({"parse_fail": True, "empty_raw": True,
                          "error": "empty content"})
@@ -321,7 +355,7 @@ def chat_json(system: str, user: str, meta: dict | None = None,
     # Repair pass stays at 0.0 (pilot-consistent). It is a repair of a
     # failed first attempt, logged with repair=True, not a fresh
     # vote-sample; see PREREGISTRATION.md §8 amendment.
-    COST_LOG["repairs"] = COST_LOG.get("repairs", 0) + 1
+    _bump("repairs")
     fix = chat_text(fix_system, fix_user, temperature=0.0,
                     response_format=json_format, purpose="repair", repair=True)
     parsed = _parse_json(fix)
@@ -330,7 +364,7 @@ def chat_json(system: str, user: str, meta: dict | None = None,
             meta["repaired"] = True
         return parsed
 
-    COST_LOG["json_failures"] += 1
+    _bump("json_failures")
     _log_error("chat_json", "unparseable JSON", raw)
     if meta is not None:
         meta.update({"parse_fail": True, "error": "unparseable JSON"})

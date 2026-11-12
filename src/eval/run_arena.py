@@ -33,6 +33,7 @@ from src.agents.dmn_tpn_agent import DmnTpnAgent
 from src.agents.null_agents import MajorityFollowerAgent, RandomVoterAgent
 from src.config import settings
 from src.llm_client import COST_LOG, BillingExhausted
+from src.llm_client import call_threads as _call_threads, pmap as _pmap
 from src.mafia.engine import Game
 
 AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent,
@@ -457,40 +458,42 @@ def _night_actions(game, agents, seed, day, night_mode, det_info):
 
     prompt_alive = _shuffled(alive, seed, day, 9)
     candidates = [a for a in alive if game.players[a].role != "mafia"]
-    if night_mode == "llm" and candidates:
-        killer = min(mafia_pids)
-        ctx = game.history_text(limit=40) + _private_note(game, killer, det_info)
-        pick = agents[killer].night_action(
-            "mafia", ctx, prompt_alive, _shuffled(candidates, seed, day, 1), "kill")
-        if pick is not None:
-            kill = int(pick)
+    doctors = [p.pid for p in game.alive() if p.role == "doctor"]
+    detectives = [p.pid for p in game.alive() if p.role == "detective"]
+    det = detectives[0] if detectives else None
+    det_options = [a for a in alive if a != det] if det is not None else []
+    # The three night choices read the same pre-night state and never see
+    # each other, so they run concurrently (P0-S1); fallbacks unchanged.
+    jobs = []
+    if night_mode == "llm":
+        if candidates:
+            killer = min(mafia_pids)
+            jobs.append(("kill", killer, "mafia", _shuffled(candidates, seed, day, 1)))
+        if doctors:
+            jobs.append(("save", doctors[0], "doctor", _shuffled(alive, seed, day, 2)))
+        if det is not None and det_options:
+            jobs.append(("check", det, "detective", _shuffled(det_options, seed, day, 3)))
+
+    def _ask(job):
+        action, pid, role, options = job
+        ctx = game.history_text(limit=40) + _private_note(game, pid, det_info)
+        return action, agents[pid].night_action(role, ctx, prompt_alive, options, action)
+
+    picks = dict(_pmap(_ask, jobs))
+    if picks.get("kill") is not None:
+        kill = int(picks["kill"])
     if kill is None and candidates:
         kill = random.Random(seed * 1000 + day).choice(candidates)
-
-    doctors = [p.pid for p in game.alive() if p.role == "doctor"]
     if doctors:
-        if night_mode == "llm":
-            doc = doctors[0]
-            ctx = game.history_text(limit=40) + _private_note(game, doc, det_info)
-            pick = agents[doc].night_action(
-                "doctor", ctx, prompt_alive, _shuffled(alive, seed, day, 2), "save")
-            if pick is not None:
-                save = int(pick)
+        if picks.get("save") is not None:
+            save = int(picks["save"])
         if save is None:
             save = doctors[0]
-
-    detectives = [p.pid for p in game.alive() if p.role == "detective"]
-    if detectives:
-        det = detectives[0]
-        options = [a for a in alive if a != det]
-        if night_mode == "llm" and options:
-            ctx = game.history_text(limit=40) + _private_note(game, det, det_info)
-            pick = agents[det].night_action(
-                "detective", ctx, prompt_alive, _shuffled(options, seed, day, 3), "check")
-            if pick is not None:
-                check = int(pick)
-        if check is None and options:
-            check = min(options)
+    if det is not None:
+        if picks.get("check") is not None:
+            check = int(picks["check"])
+        if check is None and det_options:
+            check = min(det_options)
     return kill, save, check
 
 
@@ -586,12 +589,20 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         alive_roles = {p.pid: p.role for p in game.alive()}
         shared, facts = game.history_text(), game.facts_text()
         trust_all, traces = {}, {}
-        for p in list(game.alive()):
-            ag = agents[p.pid]
-            if isinstance(ag, DmnTpnAgent):
-                trust, trace, delay = ag.reason(
-                    p.role, shared + _private_note(game, p.pid, det_info),
-                    facts, alive, prev_majority, alive_roles)
+        alive_players = list(game.alive())
+        # Per-seat DMN/TPN reasoning reads the same pre-discussion snapshot
+        # and never sees another seat's result: concurrent (P0-S1).
+        reasoners = [p for p in alive_players if isinstance(agents[p.pid], DmnTpnAgent)]
+
+        def _reason(p):
+            return agents[p.pid].reason(
+                p.role, shared + _private_note(game, p.pid, det_info),
+                facts, alive, prev_majority, alive_roles)
+
+        reasoned = dict(zip([p.pid for p in reasoners], _pmap(_reason, reasoners)))
+        for p in alive_players:
+            if p.pid in reasoned:
+                trust, trace, delay = reasoned[p.pid]
                 trust_all[p.pid] = trust
                 traces[p.pid] = trace
                 if p.pid == focal_pid:
@@ -611,29 +622,37 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         # Citation validity is judged against turns that existed BEFORE
         # any vote line or lynch result from this day was appended (F11).
         valid_turns_at_vote = {h["turn"] for h in game.history}
-        for p in list(game.alive()):
+        voters = list(game.alive())
+        alive_ids_at_vote = game.alive_ids()
+
+        # Every vote reads the same pre-vote snapshot `full`; vote lines are
+        # appended afterwards in seat order, so votes are independent and
+        # run concurrently (P0-S1) with an unchanged history.
+        def _vote(p):
             ag = agents[p.pid]
             view = full + _private_note(game, p.pid, det_info)
             if isinstance(ag, DmnTpnAgent):
-                v, info = ag.vote(p.role, view, trust_all[p.pid], traces[p.pid])
-            else:
-                v, info = ag.vote(p.role, view, {}, prev_majority=prev_majority,
-                                  seed=game.seed, day=day, alive=game.alive_ids())
+                return ag.vote(p.role, view, trust_all[p.pid], traces[p.pid])
+            return ag.vote(p.role, view, {}, prev_majority=prev_majority,
+                           seed=game.seed, day=day, alive=alive_ids_at_vote)
+
+        for p, (v, info) in zip(voters, _pmap(_vote, voters)):
             votes[p.pid] = v
             infos[p.pid] = info if isinstance(info, dict) else {}
             game.add(p.pid, f"votes {v} ({infos[p.pid].get('reason','')[:120]})", f"vote-{day}")
         # shadow probe (team only): post-vote, pre-vote snapshot, no feedback
         probe_trust = {}
         if design == "team":
-            for p in list(game.alive()):
-                if game.players[p.pid].role == "mafia":
-                    continue
-                ag = agents[p.pid]
-                if isinstance(ag, (RandomVoterAgent, MajorityFollowerAgent)):
-                    continue
+            probed = [p for p in list(game.alive())
+                      if game.players[p.pid].role != "mafia"
+                      and not isinstance(agents[p.pid], (RandomVoterAgent, MajorityFollowerAgent))]
+
+            def _probe(p):
                 view = full + _private_note(game, p.pid, det_info)
-                ptrust, pinfo = ag.elicit_trust_probe(p.role, view, alive)
-                probe_trust[p.pid] = (ptrust, pinfo)
+                return agents[p.pid].elicit_trust_probe(p.role, view, alive)
+
+            for p, res in zip(probed, _pmap(_probe, probed)):
+                probe_trust[p.pid] = res
         # record majority for metrics
         maj, plurality_tied = _plurality_info(votes)
         maj_correct = True
