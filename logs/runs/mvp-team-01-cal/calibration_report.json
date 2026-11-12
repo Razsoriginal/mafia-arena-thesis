@@ -1,0 +1,57 @@
+{
+  "n_games": 100,
+  "n_discarded_games": 0,
+  "discarded_spend_inr": 0.0,
+  "kept_spend_inr": 204.5333,
+  "cost_per_arm_inr": {
+    "dmn_village": 68.6782,
+    "cot_village": 52.8281,
+    "cotx3_village": 60.5138,
+    "random_village": 12.1046,
+    "majority_village": 10.4086
+  },
+  "mean_cost_per_game_inr": {
+    "dmn_village": 3.4339,
+    "cot_village": 2.6414,
+    "cotx3_village": 3.0257,
+    "random_village": 0.6052,
+    "majority_village": 0.5204
+  },
+  "json_failures_per_game": 0.31,
+  "json_per_arm": {
+    "dmn_village": 0.85,
+    "cot_village": 0.35,
+    "cotx3_village": 0.3,
+    "random_village": 0.05,
+    "majority_village": 0.0
+  },
+  "mean_days": 3.1,
+  "mean_days_per_arm": {
+    "dmn_village": 2.95,
+    "cot_village": 3.4,
+    "cotx3_village": 2.9,
+    "random_village": 3.35,
+    "majority_village": 2.9
+  },
+  "within_seed_days_correlation": 0.09411884340791496,
+  "cotx3_nonunanimity_share": 0.13366336633663367,
+  "cotx3_votes_with_samples": 202,
+  "probe_missingness_by_arm": {
+    "cot_village": {
+      "missing": 3,
+      "total": 1094,
+      "rate": 0.002742230347349177
+    },
+    "dmn_village": {
+      "missing": 0,
+      "total": 900,
+      "rate": 0.0
+    },
+    "cotx3_village": {
+      "missing": 0,
+      "total": 939,
+      "rate": 0.0
+    }
+  },
+  "probe_cost_per_game_inr": 0.445937
+}

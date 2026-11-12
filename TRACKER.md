@@ -2,14 +2,14 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** Phase 0 is done. Pre-reg v2 is frozen at tag `freeze-v2` and the confirmatory gate dry-run passes. The bridge smoke is running, followed by a load-test point at 24/32 and then calibration.
-- **Ledger:** `logs/spend_ledger.jsonl`, Rs.71.70 after smoke-team-02. Check it with `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
+- **Phase:** Phase 1 calibration is complete (`mvp-team-01-cal`, 20 trios, 100 games). The result is a **NO-GO**: JSON failures were 0.31 per game against the 0.20 limit, and probe cost was Rs.0.446 against Rs.0.35. The primary is **paused** pending a decision. See `docs/decisions/2026-11-12-calibration-nogo.md` and D-009.
+- **Ledger:** `logs/spend_ledger.jsonl`, Rs.281.52 after calibration, with no reconcile gap. Check it with `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
 - **In-flight jobs:** none.
-- **Last decision:** `docs/decisions/2026-11-12-rescope.md` chose Option B, a Mafia primary plus the IrrevOps bridge. Pre-reg v2 is committed (`d1a5eef`); v1 is tagged `prereg-v1`.
+- **Last decision:** the calibration NO-GO memo. Option A (count the games under the §9 recorded rule, with D8 and a fallback-sensitivity analysis) or Option B (fix, re-freeze, restart; projected n ≈ 172). A decision is required.
 - **Next 3 actions:**
-  1. Bridge smoke (`bridge-smoke-01`, at most Rs.5), then `bridge-freeze-v1`.
-  2. Load-test point at 24/32 concurrent requests (`loadtest-conc-02`, at most Rs.3) to choose the primary concurrency.
-  3. Calibration: `--confirmatory --calibration --campaign mvp-team-01 --seed 5000 --start-trio 0 --trios 20` with all 5 arms.
+  1. Choose A or B.
+  2. If A: add D8 and the sensitivity analysis to pre-reg §15, write `logs/calibration_go.json`, then resume with the same flags plus `--start-trio 20 --trios 164 --run-tag mvp-team-01-r2 --resume`.
+  3. If B: fix branch (failing test, mutation proof), smoke, `freeze-v3`, new campaign.
 
 **Last updated:** 2026-11-12
 **Branch:** `prereg-mvp` (pre-reg implementation through `bc80015`; smoke evidence committed after it)
@@ -25,7 +25,7 @@ actually done, what the logs prove, and what to do next.
 |---|---|---|
 | G0 Research and re-scope | **Done** | `docs/research/` (search log, incidents, prior art), `docs/decisions/2026-11-12-rescope.md` |
 | G1 Pipeline fixed, fast, frozen | **Done** | Phase 0 fixes with mutation proofs (`docs/mutation_proofs.md`); smoke-team-02 had 0 JSON failures in 10 games; tag `freeze-v2` |
-| G2 Calibration and GO/NO-GO | Pending | — |
+| G2 Calibration and GO/NO-GO | **NO-GO, awaiting decision** | `logs/calibration_report.json`, `docs/decisions/2026-11-12-calibration-nogo.md`, D-009 |
 | G3 Confirmatory dataset locked | Pending | — |
 | G4 Pre-registered analysis | Pending | `scripts/make_all.py` and `evaluate.py` are ready and blind-safe |
 | G5 Secondary cells | Pending | The IrrevOps bridge is built (`src/bridge/`) |

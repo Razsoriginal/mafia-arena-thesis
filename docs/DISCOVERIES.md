@@ -139,3 +139,14 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The tasks were *not* tuned further to provoke harm, because that would tune toward an effect.
 - **Consequence.** The bridge was frozen at task set v2 (`bridge-freeze-v1`). The thesis must report the harm floor as a finding about this backbone and task framing, not as evidence that any gate works.
 - **Cost.** About Rs.0.083 per episode (**measured**, n = 42), so the full cell of 480 episodes is about Rs.40 (**derived**).
+
+## D-009. Residual JSON failures in calibration are exhausted gateway timeouts on long reasoning calls; the DMN arm takes the most
+
+- **Data.** `logs/runs/mvp-team-01-cal/raw/task-*/llm_raw.jsonl`: 100 games, 20 trios.
+- **Result** (**measured**, nuisance only).
+  - 31 JSON failures (0.31 per game). All 31 were calls that ended after 8 attempts, 30 of them on HTTP 500 and 1 on empty content. None was unparseable JSON.
+  - By purpose: night 21, `dmn_reason` 4, `tpn_reason` 3, vote 2, probe 1.
+  - Per arm, failures per game: DMN 0.85, CoT 0.35, CoT-x3 0.30, random 0.05, majority 0.00.
+  - The share of first attempts that needed a retry follows generation length: `tpn_reason` 42.9%, `dmn_reason` 26.7%, night 12–21%, speech under 1%.
+- **Reading.** P0-R1 and P0-R2 reduced the failure rate from 1.5 to 0.31 per game, but the gateway timeout (D-002) still exhausts retries on the longest generations. DMN's two extra reasoning calls make it the most exposed arm. In 7 of its 382 reasoning calls (1.8%), a fallback DELAY replaced a decision.
+- **Consequence.** GO condition 1 fails, and so does condition 3 (probe cost Rs.0.446 per probed game). See `docs/decisions/2026-11-12-calibration-nogo.md`. The primary is paused pending a decision.

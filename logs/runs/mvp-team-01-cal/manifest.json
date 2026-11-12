@@ -1,0 +1,106 @@
+{
+  "run_tag": "mvp-team-01-cal",
+  "started_at": "2026-11-12T10:07:16.239254+00:00",
+  "git_sha": "ae9edbd",
+  "args": {
+    "games": 5,
+    "agents": "dmn_tpn,cot",
+    "design": "team",
+    "arms": "dmn_village,cot_village,cotx3_village,random_village,majority_village",
+    "seed": 5000,
+    "gate": "llm",
+    "night": "llm",
+    "focal_role": "random",
+    "run_tag": "mvp-team-01-cal",
+    "max_days": 5,
+    "trio_window": 2,
+    "call_threads": 3,
+    "workers": 6,
+    "tau": 0.35,
+    "tau_sweep": null,
+    "ablate": "",
+    "budget_cap": 2000.0,
+    "calibration_trios": 20,
+    "campaign": "mvp-team-01",
+    "start_trio": 0,
+    "trios": 20,
+    "planned_trios": 184,
+    "resume": false,
+    "calibration": true,
+    "spend_ledger": null,
+    "pending_file": null,
+    "calibration_go": null,
+    "calibration_report": null,
+    "planned_trio_cost": 10.0,
+    "confirmatory": true,
+    "no_canonical": false,
+    "out": "logs/games.parquet"
+  },
+  "design": "team",
+  "arm_map": {
+    "dmn_village": {
+      "village": "dmn_tpn",
+      "mafia": "cot"
+    },
+    "cot_village": {
+      "village": "cot",
+      "mafia": "cot"
+    },
+    "cotx3_village": {
+      "village": "cotx3",
+      "mafia": "cot"
+    },
+    "random_village": {
+      "village": "random_voter",
+      "mafia": "cot"
+    },
+    "majority_village": {
+      "village": "majority_follower",
+      "mafia": "cot"
+    }
+  },
+  "arms": "dmn_village,cot_village,cotx3_village,random_village,majority_village",
+  "probe_enabled": true,
+  "prompt_hash": "d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc",
+  "prompts_sha256": "d36b31402d91200761ab5b10e42b2b30ecc29452ab31b554dc76d5bf72962efc",
+  "runpath_sha256": "3fca1ecb5802dce0f7a2ade29e1c08f990a2c2eba0261d7b6e9182566e49d869",
+  "campaign": "mvp-team-01",
+  "planned_trios": 184,
+  "start_trio": 0,
+  "trios": 20,
+  "spend_ledger": "logs/spend_ledger.jsonl",
+  "budget_cap_inr": 2000.0,
+  "planned_trio_cost_inr": 10.0,
+  "effective_tau": 0.35,
+  "git_status_summary": {
+    "n_dirty": 1,
+    "entries": [
+      "?? logs/runs/mvp-team-01-cal.out"
+    ]
+  },
+  "dirty_runpath": [],
+  "calibration_trios": 20,
+  "trio_window": 2,
+  "call_threads": 3,
+  "confirmatory": true,
+  "llm": {
+    "provider": "aicredits",
+    "base_url": "https://aicredits.in/v1",
+    "model": "meta/muse-spark-1.3-contributor",
+    "max_tokens": 2500,
+    "temperature_dialogue": 0.3,
+    "temperature_json": 0.0,
+    "vote_temperature": 0.7
+  },
+  "jev": {
+    "base_url": "https://openrouter.ai/api/v1",
+    "model": "typesafe/jev-1.14",
+    "key_present": true,
+    "min_interval_s": 0.0,
+    "threshold": 0.6
+  },
+  "thresholds": {
+    "tau_delay": 0.35,
+    "evt_threshold": 0.6
+  }
+}
