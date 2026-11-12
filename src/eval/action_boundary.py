@@ -66,7 +66,34 @@ def confusion_matrix(votes: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def delay_quality_per_game(votes: pd.DataFrame) -> pd.DataFrame:
+    """S3 per game (v1 definition, once per game-day): among days with a
+    plurality target on which a village seat made a reasoned (non-JSON-
+    failure) no-lynch vote, the share where the plurality target was
+    innocent. NaN when a game has no qualifying day."""
+    df = votes
+    if "delay_cause" in df.columns:
+        df = df[df["delay_cause"].fillna("").astype(str) != "json_failure"]
+    rows = []
+    for (gid, seed, arm), g in votes.groupby(["game_id", "requested_seed", "arm"]):
+        sub = df[df["game_id"] == gid]
+        vals = []
+        for _day, grp in sub.groupby("day"):
+            village = grp[grp["is_village"].astype(bool)]
+            if village.empty or not (village["vote"].astype(str) == "no-lynch").any():
+                continue
+            if str(grp["majority_vote"].iloc[0]) == "no-lynch":
+                continue
+            vals.append(0.0 if bool(grp["majority_correct"].iloc[0]) else 1.0)
+        rows.append({"game_id": gid, "requested_seed": seed, "arm": arm,
+                     "qualifying_days": len(vals),
+                     "delay_quality": float(np.mean(vals)) if vals else float("nan")})
+    return pd.DataFrame(rows)
+
+
 def per_game_metric(votes: pd.DataFrame, metric: str) -> pd.DataFrame:
+    if metric == "delay_quality":
+        return delay_quality_per_game(votes)
     if metric == "wrongful_lynches":
         return wrongful_lynches_per_game(votes)
     if metric == "needless_hold_rate":

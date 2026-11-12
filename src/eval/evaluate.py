@@ -204,6 +204,15 @@ def main():
         print(f"JSON failures: {int(df['json_failures'].sum())} over "
               f"{len(df)} games ({df['json_failures'].mean():.2f}/game)")
 
+    blind = is_team and not args.unblind
+    if blind:
+        # P0-K1: every secondary (cascade, delay, abstention, S1/S2, say-do,
+        # calibration) is an outcome by arm. Nothing below is printed for
+        # team data until --unblind after lock.
+        print("Secondary outcomes by arm are blinded (votes and trust tables not summarised); "
+              "pass --unblind after lock.")
+        return
+
     if os.path.exists(args.votes):
         vdf_all = pd.read_parquet(args.votes)
         vdf = vdf_all
@@ -211,6 +220,24 @@ def main():
             vdf = vdf[vdf["game_id"].astype(str).isin(set(df["game_id"].astype(str)))]
             if args.campaign and "campaign" in vdf.columns:
                 vdf = vdf[vdf["campaign"].astype(str) == str(args.campaign)]
+        if is_team and {"lynched", "majority_vote"} <= set(vdf.columns):
+            from .action_boundary import confusion_matrix, holm, paired_contrast
+            fam = {}
+            for metric, label in (("wrongful_lynches", "S1 wrongful_lynches"),
+                                  ("needless_hold_rate", "S2 needless_hold_rate"),
+                                  ("delay_quality", "S3 delay_quality")):
+                for arm_b in ("cot_village", "cotx3_village"):
+                    res = paired_contrast(vdf, metric, "dmn_village", arm_b,
+                                          n_boot=args.n_boot, n_perm=args.n_boot)
+                    if arm_b == "cot_village":
+                        fam[label] = res["p_perm"]
+                    print(f"{label} dmn-{arm_b.split('_')[0]}: diff {res['diff']:.3f} "
+                          f"95% CI [{res['ci_low']:.3f}, {res['ci_high']:.3f}] "
+                          f"p_perm {res['p_perm']:.4f} (n_pairs={res['n_pairs']}, "
+                          f"excluded_seeds={res['n_excluded_seeds']})")
+            print(f"Holm-adjusted p (S1-S3, dmn vs cot): {holm(fam)}")
+            print("Confusion matrix (village votes):")
+            print(confusion_matrix(vdf).to_string(index=False))
         if is_team and "is_village" in vdf.columns:
             for arm, g in vdf.groupby("arm"):
                 line = (f"\n[{arm}] team_cascade_resistance: {team_cascade_resistance(g):.3f} "

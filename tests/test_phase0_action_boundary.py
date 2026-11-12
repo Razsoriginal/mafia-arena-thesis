@@ -91,5 +91,17 @@ class TestS1S2Confusion(unittest.TestCase):
         self.assertEqual(int(cm.loc["cot_village", "act_correct"]), 2)
 
 
+
+class TestS3Paired(unittest.TestCase):
+    def test_delay_quality_per_game(self):
+        from src.eval.action_boundary import delay_quality_per_game
+        rows = [_v("d", 1, "dmn_village", 0, 0, "no-lynch", "3", False, delay_cause="low_confidence"),
+                _v("d", 1, "dmn_village", 1, 0, "no-lynch", "5", True, delay_cause="low_confidence"),
+                _v("d", 1, "dmn_village", 2, 0, "no-lynch", "4", False, parse_fail=True, delay_cause="json_failure")]
+        out = delay_quality_per_game(pd.DataFrame(rows)).iloc[0]
+        self.assertEqual(out["qualifying_days"], 2)  # JSON-failure day excluded
+        self.assertAlmostEqual(out["delay_quality"], 0.5)
+
+
 if __name__ == "__main__":
     unittest.main()
