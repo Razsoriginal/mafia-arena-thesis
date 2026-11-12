@@ -73,7 +73,7 @@ def _log_jsonl(name: str, payload: dict):
 
 
 PURPOSES = {"speak", "dmn_reason", "tpn_reason", "night", "vote",
-            "probe", "repair", "judge"}
+            "probe", "repair", "judge", "bridge_step", "bridge_verify"}
 # AiCredits catalog rates (USD/token) + INR/USD, billing markup 1.10.
 # Duplicated from run_arena so per-call estimates do not need an import.
 _MUSE_IN, _MUSE_OUT, _INR_PER_USD, _BILLING_MARKUP = 1e-07, 2e-07, 94.834253, 1.10
@@ -127,7 +127,8 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
              attempt=None, repair: bool = False, escalated: bool = False,
              realised_model=None, purpose=None, prompt_tokens=0,
              completion_tokens=0, cost_inr=0.0, cost_estimated: bool = False,
-             error=None, latency_s=None, backoff_s=0.0, error_class=None):
+             error=None, latency_s=None, backoff_s=0.0, error_class=None,
+             json_mode=None):
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
@@ -150,6 +151,7 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "cost_estimated": bool(cost_estimated),
         "error": (str(error)[:300] if error else None),
         "error_class": error_class,
+        "json_mode": json_mode,
         "latency_s": (round(float(latency_s), 3) if latency_s is not None else None),
         "backoff_s": float(backoff_s or 0.0),
         "raw": (raw or "")[:4000],
@@ -258,7 +260,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                      purpose=resolved_purpose, prompt_tokens=pt,
                      completion_tokens=ct, cost_inr=call_cost,
                      cost_estimated=cost_est, latency_s=time.time() - t0,
-                     backoff_s=backoff,
+                     backoff_s=backoff, json_mode=bool(use_format),
                      error_class=None if text else "empty_content")
             if not text:
                 raise ValueError(f"empty content (max_tokens={max_tokens})")
@@ -271,7 +273,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                          escalated=escalated, realised_model=None,
                          purpose=resolved_purpose, error=e,
                          latency_s=time.time() - t0, backoff_s=backoff,
-                         error_class=eclass)
+                         error_class=eclass, json_mode=bool(use_format))
             _log_error("chat_text", e, temperature=temp,
                        max_tokens=max_tokens, attempt=attempt)
             if eclass == "http_402":
@@ -291,6 +293,12 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                 continue
             if attempt == MAX_ATTEMPTS - 1:
                 return ""
+            if eclass == "http_500" and use_format:
+                # P0-R2: gateway timeout on a slow generation; JSON mode at
+                # t=0 was slower than plain on 9/12 paired prompts. Retry the
+                # same prompt and temperature without response_format; the
+                # parser is repair-tolerant.
+                use_format = None
             backoff = _backoff_s(attempt)
             time.sleep(backoff)
     return ""
