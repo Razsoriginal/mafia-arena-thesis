@@ -421,12 +421,23 @@ def _private_note(game, pid, det_info):
         partners = [p.pid for p in game.players if p.role == "mafia" and p.pid != pid]
         notes.append(f"You are MAFIA. Your partners: {partners}. Coordinate subtly, do not expose each other.")
     if role == "detective" and pid in det_info:
-        chk, chk_role = det_info[pid]
-        if chk is not None:
-            notes.append(f"Private detective result: Player {chk} is {chk_role}. Do not reveal it unless you choose to.")
+        results = det_info[pid]
+        if isinstance(results, tuple):  # legacy single-result form
+            results = [results]
+        for chk, chk_role in results:
+            if chk is not None:
+                notes.append(f"Private detective result: Player {chk} is {chk_role}. Do not reveal it unless you choose to.")
     if not notes:
         return ""
     return "\n[private: only you see this]\n" + "\n".join(notes)
+
+
+def _record_detective_result(det_info, det_pid, result):
+    """Append one night's check; the detective keeps every result (P0-E3)."""
+    prev = det_info.get(det_pid, [])
+    if isinstance(prev, tuple):
+        prev = [prev]
+    det_info[det_pid] = list(prev) + [tuple(result)]
 
 
 def _shuffled(items, seed, day, salt):
@@ -561,7 +572,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             res = game.night(kill, save, check)
             det = [p.pid for p in game.alive() if p.role == "detective"]
             if det and check is not None:
-                det_info[det[0]] = res["detective_info"]
+                _record_detective_result(det_info, det[0], res["detective_info"])
             if res["killed"] is not None:
                 game.add("engine", f"Night: Player {res['killed']} was killed.", f"night-{day}")
             else:
