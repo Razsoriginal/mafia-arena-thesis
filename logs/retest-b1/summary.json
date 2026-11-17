@@ -1,0 +1,134 @@
+{
+ "part1b": {
+  "agree_new": [
+   6,
+   9
+  ],
+  "agree_logged": [
+   13,
+   18
+  ],
+  "new_ct_med": 887.0,
+  "logged_ct_med": 928.0,
+  "new_toks_med": 107.45,
+  "logged_toks_med": 64.8
+ },
+ "variants": {
+  "V0": {
+   "n": 16,
+   "http": 0,
+   "empty": 6,
+   "badjson": 4,
+   "valid": 6,
+   "fail_ci": [
+    0.38640647097934805,
+    0.8151901744524719
+   ],
+   "valid_ci": [
+    0.18480982554752803,
+    0.6135935290206519
+   ],
+   "ct_med": 2406.5
+  },
+  "V1": {
+   "n": 16,
+   "http": 0,
+   "empty": 6,
+   "badjson": 2,
+   "valid": 8,
+   "fail_ci": [
+    0.2799923761135083,
+    0.7200076238864918
+   ],
+   "valid_ci": [
+    0.2799923761135083,
+    0.7200076238864918
+   ],
+   "ct_med": 1913.0
+  },
+  "V2": {
+   "n": 16,
+   "http": 0,
+   "empty": 7,
+   "badjson": 1,
+   "valid": 8,
+   "fail_ci": [
+    0.2799923761135083,
+    0.7200076238864918
+   ],
+   "valid_ci": [
+    0.2799923761135083,
+    0.7200076238864918
+   ],
+   "ct_med": 1432
+  },
+  "V4": {
+   "n": 16,
+   "http": 0,
+   "empty": 0,
+   "badjson": 0,
+   "valid": 16,
+   "fail_ci": [
+    0.0,
+    0.19361341827271994
+   ],
+   "valid_ci": [
+    0.8063865817272801,
+    1.0
+   ],
+   "ct_med": 446.5
+  }
+ },
+ "cheap_fix": [],
+ "v0_vs_cal_night": {
+  "h": 0,
+  "n": 8,
+  "ci": [
+   0.0,
+   0.3244156195108769
+  ],
+  "cal": 0.098
+ },
+ "v0_vs_cal_dmn_reason": {
+  "h": 0,
+  "n": 8,
+  "ci": [
+   0.0,
+   0.3244156195108769
+  ],
+  "cal": 0.199
+ },
+ "realised": {
+  "muse-spark-1.3-contributor": 64
+ },
+ "accept": [
+  {
+   "cond": "V0-ref",
+   "ok": true,
+   "error_class": null,
+   "ct": 959,
+   "cost_inr": 0.022106263945342507
+  },
+  {
+   "cond": "V4a-kwarg",
+   "ok": true,
+   "error_class": null,
+   "ct": 178,
+   "cost_inr": 0.005154872544937501
+  },
+  {
+   "cond": "V4b-extrabody",
+   "ok": true,
+   "error_class": null,
+   "ct": 168,
+   "cost_inr": 0.0037360345733056513
+  }
+ ],
+ "reasoning_med": {
+  "V0": 2410.0,
+  "V1": 2179.0,
+  "V2": 1956.0,
+  "V4": 259.0
+ },
+ "persist_n": 34
+}
