@@ -1,5 +1,7 @@
 # Chapter 3 — Threat Model and Method (draft v1, 2026-11-12)
 
+> **Superseded on 2026-11-19:** the method sections describe the closed freeze-v2 design; the current method is `ch4_methods.md`. The threat model in §3.1 still applies and will be merged into the taxonomy chapter.
+
 > Binding design: `docs/PREREGISTRATION.md` v2. This chapter explains the design. It does not alter it. Any conflict is resolved in favour of the pre-registration.
 
 ## 3.1 Threat model (incident-grounded)
