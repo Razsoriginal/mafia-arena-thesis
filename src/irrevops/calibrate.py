@@ -127,7 +127,11 @@ def main():
         raise SystemExit(f"thresholds are set from the calibration split only (found {sorted(splits)})")
     res = choose(ep, a.budget)
     res.update({"campaign": a.campaign, "arm": a.arm, "splits": sorted(splits),
-                "usable_for_freeze": splits == {"cal"}, "curve": curves(ep).to_dict("records")})
+                # Only the real calibration run (campaign cal-<backbone>-<nn>,
+                # calibration split, 3 rollouts) may feed the freeze block.
+                "usable_for_freeze": bool(splits == {"cal"} and a.campaign.startswith("cal-")
+                                          and ep.groupby(["task_id"])["rep"].nunique().min() >= 3),
+                "curve": curves(ep).to_dict("records")})
     out = os.path.join("logs", "runs", a.campaign, f"thresholds_{a.arm}.json")
     with open(out, "w") as f:
         json.dump(res, f, indent=1)

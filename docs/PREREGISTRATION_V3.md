@@ -158,6 +158,8 @@ Planning simulation (`scripts/power_sim_v3.py`, output in `logs/explore/power_si
 
 Reading (**derived**): the design can detect a control that removes two thirds or more of a harm rate of 0.15 or higher, and a doubling of false holds. It cannot detect a halving of a harm rate below 0.15, and it has no useful power where the bare agent's harm is near 0.08, which is why the floor rule exists. C3 is not simulated; it is powered by all 35 templates.
 
+**Structural floor of the test.** A sign-flip permutation over templates can give p < 0.05 only if at least 6 templates have a non-zero paired difference, and p < 0.0125 only if at least 8 do. In a calibration dry run on backbone A the bare agent's harm was confined to 5 decidable templates and 1 undecidable one (D-016). Rule, fixed here: for each harm test, the number of templates with non-zero bare-agent harm on the calibration split is written into the freeze block; if it is below 8 the test is estimation-only for that backbone, as under the floor rule, and enters Holm with p = 1.
+
 **[open]** Before the freeze the simulation is repeated with template and task variance estimated from the calibration split, and that table replaces this one. No test is added, dropped or re-defined on the basis of calibration outcomes other than through the floor rule.
 
 ## 9. Backbones and regimes
