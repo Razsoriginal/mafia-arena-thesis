@@ -86,7 +86,13 @@ def _upsert(path: str, new_df: pd.DataFrame, keys: list):
             raise RuntimeError(f"_upsert: cannot merge new rows into {path}; refusing to overwrite: {e}") from e
         present = [k for k in keys if k in df.columns]
         if present:
-            df = df.drop_duplicates(subset=present, keep="last")
+            # E4-U2: a row with a missing key value has no identity under
+            # these keys (legacy focal rows have no campaign/arm). Such rows
+            # are never deduplicated; NaN keys used to compare equal and the
+            # canonical games table lost 9 of 14 pilot rows.
+            keyed = df[present].notna().all(axis=1)
+            df = pd.concat([df[~keyed],
+                            df[keyed].drop_duplicates(subset=present, keep="last")]).sort_index()
     else:
         df = new_df
     tmp = path + ".tmp"
