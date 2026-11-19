@@ -2,17 +2,19 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** E done (awaiting independent review). S done as reported by sub-agents (spot-check pending). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run.
-- **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is now a controls ladder on IrrevOps v3 (`src/irrevops/`); Mafia is an exploratory stress test. See `docs/decisions/2026-11-19-master-reevaluation.md` and `docs/decisions/2026-11-19-design-decision-v3.md`.
-- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.330.12** of the **Rs.5,000** cap. A machine crash on 2026-11-19 damaged the file; it was repaired with the user's approval (`docs/decisions/2026-11-19-ledger-crash.md`). The interrupted bundle `explore-ops-04-newset` is damaged and must not be analysed.
-- **Tests:** 218 pass (`.venv/bin/python -m unittest discover -s tests`).
-- **In-flight jobs:** none.
-- **Campaigns so far on v3 (exploratory, dev split, seeds >= 100000):** `explore-ops-00`, `explore-ops-01`, `explore-ops-02-minimal` (D-013).
-- **Blocked on the user:** reviewer key, keys for backbones B and C, a monitor and a task author, one billing check, and later a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).
-- **Next 3 actions (all free or on backbone A only):**
-  1. Extend the template set to 30 or more with at least 12 undecidable; extend `scripts/power_sim.py` to the two-level design.
-  2. Dev-split pilot of L1, L2, L3, L5a and L6 on backbone A (about Rs.30) to shake out the harness; then the calibration-split run for L0 and L2 thresholds.
-  3. One-command regeneration for the v3 tables (`scripts/make_all.py --ops <campaign>`), blind-safe; spot-check the load-bearing citations.
+- **Phase:** E done. S done and spot-checked (twelve load-bearing claims). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run; the runner refuses the test split.
+- **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is a controls ladder on IrrevOps v3 (`src/irrevops/`, 35 templates, 17 undecidable, cue factor on 13). Mafia is an exploratory stress test.
+- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.356.54** of the **Rs.5,000** cap. Repaired once after a machine crash, with the user's approval (`docs/decisions/2026-11-19-ledger-crash.md`). `logs/runs/explore-ops-04-newset` is damaged: never analyse it.
+- **Tests:** 218+ pass (`.venv/bin/python -m unittest discover -s tests`).
+- **Exploratory campaigns on v3 (dev split, seeds >= 100000):** `explore-ops-00/01/02-minimal/03-arms/05-newset/06-uncued/07-minimal`. Findings D-013 to D-015.
+- **Main open scientific point (D-015):** on backbone A the bare agent is near the harm floor on undecidable tasks, cued or not. Backbones B and C must include a lower capability tier; the floor rule in the draft makes harm contrasts estimation-only where bare harm is under 0.10.
+- **Main open budget point:** three backbones at assumed prices need about Rs.7,780, about Rs.3,080 over what remains (design memo section 6). No option is taken until B and C are priced.
+- **Sub-agent work in flight when this was written:** an independent code review of `src/irrevops/` and a repaired Mafia gate (patch in the session scratchpad). If the session was reset, check `docs/reviews/` and `git log` to see whether they landed.
+- **Blocked on the user:** reviewer key (cross-family), keys for backbones B and C, a monitor and a task author, one billing check, and a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).
+- **Next 3 actions:**
+  1. Apply the code-review findings (test first), then run the pilot calibration on backbone A: bare agent and a score-only pass of the same-model verifier on the calibration split, to exercise `calibrate.py` and estimate template variance for power.
+  2. Land the Mafia v3 gate patch after reading it; run a 2-game smoke only if the ledger allows.
+  3. When keys arrive: price B and C with 50-episode dev pilots, write the budget request if needed, run the cross-family review, then freeze.
 
 **Last updated:** 2026-11-19
 **Branch:** `prereg-mvp`
