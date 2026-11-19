@@ -1,0 +1,1 @@
+{"ts": 1795075506.3969572, "run_tag": "explore-ops-03-arms", "fn": "chat_text", "provider": "aicredits", "model": "meta/muse-spark-1.3-contributor", "requested_model": "meta/muse-spark-1.3-contributor", "temperature": 0.7, "max_tokens": 2500, "attempt": 0, "error": "Error code: 500", "raw": ""}
