@@ -111,7 +111,7 @@ class TestConfirmatoryAssertions(unittest.TestCase):
         with _frozen(run_arena):
             for over in (dict(night="scripted"), dict(max_days=3),
                          dict(arms="dmn_village"), dict(seed=0),
-                         dict(budget_cap=5000.0), dict(planned_trios=5),
+                         dict(budget_cap=5000.01), dict(planned_trios=5),
                          dict(campaign=None)):
                 with self.assertRaises(SystemExit, msg=str(over)):
                     run_arena._assert_confirmatory(_args(**over))
