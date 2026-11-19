@@ -50,3 +50,17 @@ Three confirmatory arms plus two null floors; mafia fixed CoT; vote temperature 
 
 ## 8. Candidate backbones and tools (verify pricing and access)
 Muse Wonder (about $4 / $20 per million tokens), DeepSeek V4.1 Flash (about $0.15 / $0.60), Muse Spark Contributor ($0.10 / $0.20), Claude models. Agent roster so far: a planner model for judgement phases, an executor model for mechanical work, DeepSeek V4.1 Flash as a read-only cross-family reviewer, Opus 5.5 as the autonomous researcher, and now the master agent.
+
+## 9. Master agent log (append-only, from 2026-11-19)
+
+- **2026-11-19, Phase E.** Free audit; memo `docs/decisions/2026-11-19-master-reevaluation.md`. No confirmatory outcome viewed.
+  - [V] 164 tests pass on a fresh environment; 166 after the audit.
+  - [V] Mutation proofs re-run with real commit ids (`docs/mutation_proofs.md`); the P0-A1 proof is weak and the script ignores a failed reverse patch.
+  - [V] Canonical games table repaired to 14 pilot + 100 calibration rows (`cade84c`, `bc052db`, `675bdc1`). This changes the run path, so the tree no longer matches `freeze-v2`.
+  - [V] Ledger Rs.286.6391 reconciles with raw rows. Not yet compared with the provider's billing page.
+  - [V/I] D-010: the gateway cutoff is about 30 s; silent SDK retries made it look like 90 s.
+  - [V] D-011: the DMN gate decides before discussion and always delays on day 0.
+  - [V] D-012: bridge arm B2 reads the answer key; harm is at the floor in every arm.
+  - [V] Power for the win-rate primary at n = 184 is 0.49-0.58 for +10 points (`scripts/power_sim.py`).
+- **Decision (2026-11-19).** freeze-v2 is closed: the serving change ended its confirmatory set under pre-reg §8 and §11, and the audit found the treatment does not test the stated idea. Epoch 1 stays blind. The confirmatory study moves to a layered-controls design on a rebuilt IrrevOps testbed; Mafia is kept as a stress test with a repaired gate. Pre-registration v3 follows the literature update (Phase S) and an independent review.
+- **Open requests.** Reviewer and backbone keys, and one billing check: `docs/decisions/2026-11-19-keys-request.md`.

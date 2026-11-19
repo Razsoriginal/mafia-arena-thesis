@@ -150,3 +150,41 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The share of first attempts that needed a retry follows generation length: `tpn_reason` 42.9%, `dmn_reason` 26.7%, night 12–21%, speech under 1%.
 - **Reading.** P0-R1 and P0-R2 reduced the failure rate from 1.5 to 0.31 per game, but the gateway timeout (D-002) still exhausts retries on the longest generations. DMN's two extra reasoning calls make it the most exposed arm. In 7 of its 382 reasoning calls (1.8%), a fallback DELAY replaced a decision.
 - **Consequence.** GO condition 1 fails, and so does condition 3 (probe cost Rs.0.446 per probed game). See `docs/decisions/2026-11-12-calibration-nogo.md`. The primary is paused pending a decision.
+
+## D-010. The gateway cutoff is about 30 s; three silent SDK tries made it look like 90 s (corrects D-002 and D-009)
+
+- **Question.** Why do "HTTP 500" attempts cluster at 93 s, and why do the longest reasoning calls fail most?
+- **Data.** `logs/runs/mvp-team-01-cal/raw/*/llm_raw.jsonl`, 6,216 attempt rows. Nuisance fields only (latency, error class, tokens).
+- **Method.** Latency histograms of successful and failed rows; tokens per second by latency band; the SDK defaults read from the installed client.
+- **Result** (**measured**).
+  - The client is created without `max_retries` or `timeout`. The SDK default is 2 retries and a 600 s read timeout, so one logged attempt can be three HTTP requests.
+  - 466 of 501 HTTP-500 rows lasted 90-100 s (median 93.0 s).
+  - Successful rows are tri-modal: 4,963 under 35 s, 12 at 35-40 s, 257 at 40-65 s, 5 at 65-80 s, 123 at 80-95 s.
+  - Median speed is 80 tokens/s for rows under 25 s, 32 tokens/s at 35-60 s and 26 tokens/s at 60-95 s.
+- **Reading** (**inference**). The gateway cuts a request at about 30 s. A row at 40-65 s is one failed try plus a success; a row at 80-95 s is two failed tries plus a success; a 93 s "HTTP 500" is three failed tries. At 65-80 tokens/s, 30 s is about 2,000-2,400 completion tokens, which is where DMN and TPN reasoning sit and just under the 2,500-token cap. After the serving change (107 tokens/s, D-009 follow-up) 30 s covers about 3,200 tokens: HTTP 500s vanish and budget burn remains.
+- **Confidence.** High for the tri-modal pattern. Moderate for the mechanism: it has not been tested with `max_retries=0`.
+- **Consequence.** Set `max_retries=0` and an explicit timeout; log one row per HTTP request; keep every generation under the cutoff (lower reasoning effort or a smaller token cap for long calls). Whether the provider billed the cut-off tries is unknown: see `docs/decisions/2026-11-19-keys-request.md`.
+- **Paid replication needed?** A probe of about 20 long-generation calls with `max_retries=0` (under Rs.2) before the next campaign.
+
+## D-011. The DMN gate decides before the day's discussion, so on day 0 it always delays
+
+- **Question.** When does the verify-then-delay gate actually hold a vote?
+- **Data.** Code (`src/eval/run_arena.py`, `play_one`) and the vote rows and traces of `smoke-team-01` and `smoke-team-02` (non-confirmatory).
+- **Result** (**measured**, small n).
+  - `reason()` runs before the two discussion rounds and its `delay` flag is obeyed at vote time.
+  - On day 0 the only history line is the night kill. TPN returns confidence 0 for every hypothesis. DMN village seats voted no-lynch on day 0 in 8 of 8 (smoke-team-01) and 8 of 8 (smoke-team-02) seat-days, all with cause `low_confidence`.
+  - On later days in smoke-team-02 the gate delayed 0 of 9 seat-days (median top confidence 0.65-0.70 against tau 0.35).
+- **Reading.** The tested package is close to "no lynch on day 0, then vote with a different prompt". It does not test verification at the action boundary.
+- **Confidence.** Certain for the code path. Low for the rates (16 and 9 seat-days).
+- **Consequence.** freeze-v2 is not continued. A repaired gate must run after discussion on the snapshot the vote uses (master re-evaluation, E7).
+- **Paid replication needed?** No for the finding. The repaired gate needs its own pilot.
+
+## D-012. The IrrevOps bridge cannot separate controls: the external gate reads the answer key, and harm is at the floor
+
+- **Data.** `src/bridge/agent.py`, `src/bridge/tasks.py`; `logs/runs/bridge-smoke-02/episodes.parquet` (42 episodes, non-confirmatory).
+- **Result** (**measured**).
+  - Arm B2 is built as `PolicyGate(protected=task.protected)`, and `protected` contains the risk target of every should-abstain twin. Its harm rate is 0 by construction.
+  - All four arms scored 5 of 5 justified abstentions. False holds: B0 1 of 6, B1 1 of 6, B2 0 of 5, B3 1 of 5.
+  - The five pairs in a family are one template with different names, so the 30 pairs behave like 6 items.
+- **Consequence.** `bridge-freeze-v1` is not run. IrrevOps v3 is rebuilt (master re-evaluation, E7).
+- **Paid replication needed?** No.

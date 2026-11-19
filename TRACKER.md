@@ -2,19 +2,22 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** Phase 1 calibration is complete (`mvp-team-01-cal`, 20 trios, 100 games). The result is a **NO-GO**: JSON failures were 0.31 per game against the 0.20 limit, and probe cost was Rs.0.446 against Rs.0.35. The primary is **paused** pending a decision. See `docs/decisions/2026-11-12-calibration-nogo.md` and D-009.
-- **Ledger:** `logs/spend_ledger.jsonl`, Rs.281.52 after calibration, with no reconcile gap. Check it with `.venv/bin/python -c "from src.eval import run_arena as r; print(r._ledger_total(r._ledger_path(None)))"`.
-- **In-flight jobs:** none.
-- **Last decision:** the calibration NO-GO memo. Option A (count the games under the §9 recorded rule, with D8 and a fallback-sensitivity analysis) or Option B (fix, re-freeze, restart; projected n ≈ 172). A decision is required.
+- **Phase:** E (re-evaluation) written, awaiting independent review. S (literature and incidents) in progress. D (design decision, pre-registration v3) next.
+- **Verdict:** freeze-v2 is **closed**. No confirmatory game runs until `freeze-v3`. Epoch 1 (`mvp-team-01-cal`, 100 games) stays **blind**. See `docs/decisions/2026-11-19-master-reevaluation.md`.
+- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.286.64** of the **Rs.5,000** cap (user-set). The code constant `PREREG_BUDGET_CAP` still says 2,000 and must be updated before any paid run.
+- **Tests:** 166 pass (`.venv/bin/python -m unittest discover -s tests`).
+- **In-flight jobs:** none paid. No background processes.
+- **Last decision:** 2026-11-19, pivot the confirmatory study to a layered-controls evaluation on a rebuilt IrrevOps testbed; keep Mafia as a deception stress test with a repaired gate.
+- **Blocked on the user:** reviewer key, backbone keys and one billing check (`docs/decisions/2026-11-19-keys-request.md`).
 - **Next 3 actions:**
-  1. Choose A or B.
-  2. If A: add D8 and the sensitivity analysis to pre-reg §15, write `logs/calibration_go.json`, then resume with the same flags plus `--start-trio 20 --trios 164 --run-tag mvp-team-01-r2 --resume`.
-  3. If B: fix branch (failing test, mutation proof), smoke, `freeze-v3`, new campaign.
+  1. Fold the Phase S survey into `docs/research/` and write the positioning statement.
+  2. Write the Phase D decision memo and pre-registration v3 draft (IrrevOps v3 controls ladder; Mafia stress test).
+  3. Build the free parts: client hardening (explicit retries and timeout, per-request rows, model-string guard, fingerprint probe), IrrevOps v3 sandbox and its tests.
 
-**Last updated:** 2026-11-12
-**Branch:** `prereg-mvp` (pre-reg implementation through `bc80015`; smoke evidence committed after it)
-**Status:** Pre-registered team-design MVP implemented and covered by **116 passing unit tests**. The first live team-design smoke ran on 2026-11-11 (`smoke-team-01`): 10 games, 2 of 3 planned trios, Rs.19.50. It proved the pipeline end to end but surfaced **15 JSON failures in 10 games (1.5/game)**, which must be triaged before the 20-trio calibration batch. No confirmatory game has run. The freeze block is still `PENDING`, so `--confirmatory` refuses to start.
-**Budget:** Rs.2,000 hard cap (**assumed**); Rs.400 reserve; Rs.1,600 usable. Measured spend to date **Rs.50.42** (Rs.30.92 canonical pilot + Rs.19.50 smoke). Remaining usable **Rs.1,549.58** (**derived**).
+**Last updated:** 2026-11-19
+**Branch:** `prereg-mvp`
+
+> Sections 1 to 9 below describe the project **before** the 2026-11-12 freeze and are kept as history. Where they disagree with the Agent state above or with `docs/PROJECT_HISTORY.md`, they are stale. In particular: "calibration and say-do compliance look strong" is withdrawn (master re-evaluation, E1).
 
 This is the live status file. `ROADMAP.md` is the plan; this file records what is
 actually done, what the logs prove, and what to do next.

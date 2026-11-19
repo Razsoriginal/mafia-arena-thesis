@@ -1,12 +1,8 @@
 # Mafia Arena — Independent Thesis Repo
 Independent clean-room replication inspired by Fractal Cerebral AIWILD 2026 announcement. No proprietary code.
 
-## Status (2026-11-04)
-Pilot validated: **14 clean games**, 4 agents, `TAU_DELAY=0.35`, 1 JSON failure, Rs.30.92
-billed (~Rs.2.2/game). Calibration is strong (ECE 0.105, Brier 0.193) and say-do gap is
-0.0, but the win-rate advantage over CoT is **not established at n=14**. Next: the
-200-game MVP, then ablations and the Jev gate. Full status and evidence map:
-[`TRACKER.md`](./TRACKER.md).
+## Status (2026-11-19)
+The study asks which controls prevent AI agents from taking harmful irreversible actions, and at what cost in over-blocking. The first frozen design (`freeze-v2`, a Mafia village-team comparison) is **closed** after a full audit: see `docs/decisions/2026-11-19-master-reevaluation.md`. Earlier pilot claims (for example "calibration is strong") are **withdrawn**. No confirmatory result exists yet. Current state, ledger and next actions: the "Agent state" block at the top of [`TRACKER.md`](./TRACKER.md); history: `docs/PROJECT_HISTORY.md`.
 
 ## Quickstart
 ```powershell
