@@ -194,6 +194,33 @@ def nuisance_table(ep: pd.DataFrame) -> pd.DataFrame:
                           "step_cap_share": float((ep["ended"] == "step_cap").mean())}])
 
 
+def load_episodes(campaign: str) -> pd.DataFrame:
+    """Episode rows of a campaign: the append-only JSON lines if present
+    (complete even after a crash), else the parquet of older bundles."""
+    base = os.path.join("logs", "runs", campaign)
+    jl = os.path.join(base, "episodes.jsonl")
+    if os.path.exists(jl):
+        from .run import read_rows
+        return pd.DataFrame(read_rows(jl))
+    return pd.read_parquet(os.path.join(base, "episodes.parquet"))
+
+
+def completeness_problems(ep: pd.DataFrame, manifest: dict) -> list:
+    """Reasons a campaign may not be unblinded (review M8, pre-reg v3
+    SS10): a missing task x arm x repetition cell, more than one task set,
+    or a task set other than the manifest's."""
+    problems = []
+    want = int(manifest["n_tasks"]) * len(manifest["arms"]) * len(manifest["reps"])
+    have = ep.drop_duplicates(["task_id", "arm", "rep"])
+    have = have[have["arm"].isin(manifest["arms"]) & have["rep"].isin(manifest["reps"])]
+    if len(have) != want:
+        problems.append(f"{len(have)} of {want} task x arm x repetition cells present")
+    sets = sorted(set(ep["task_set_sha256"]))
+    if sets != [manifest["task_set_sha256"]]:
+        problems.append(f"task set hashes in the data {sets} do not match the manifest")
+    return problems
+
+
 def _tag_exists(tag: str) -> bool:
     return subprocess.run(["git", "rev-parse", "-q", "--verify", f"refs/tags/{tag}"],
                           stdout=subprocess.DEVNULL).returncode == 0
@@ -223,7 +250,7 @@ def main():
     marker = os.path.join("logs", "runs", a.campaign, "DO_NOT_ANALYSE")
     if os.path.exists(marker):
         raise SystemExit(f"refused: {a.campaign} is marked DO_NOT_ANALYSE: {open(marker).read().strip()}")
-    ep = pd.read_parquet(os.path.join("logs", "runs", a.campaign, "episodes.parquet"))
+    ep = load_episodes(a.campaign)
     out_dir = a.out or os.path.join("docs", "thesis", "assets", a.campaign)
     os.makedirs(out_dir, exist_ok=True)
     label = "EXPLORATORY (non-confirmatory campaign)" if a.campaign.startswith(NONCONFIRMATORY) else "CONFIRMATORY"
@@ -231,7 +258,15 @@ def main():
              f"Source: `logs/runs/{a.campaign}/episodes.parquet`; git sha(s) {sorted(ep['git_sha'].unique())}; "
              f"task set {sorted(ep['task_set_sha256'].str[:12].unique())}; repetitions {sorted(ep['rep'].unique())}.",
              "", "## Nuisance (pooled over arms)", "", _md(nuisance_table(ep)), ""]
-    if not may_unblind(a.campaign, a.unblind):
+    blind = not may_unblind(a.campaign, a.unblind)
+    if not blind and not a.campaign.startswith(NONCONFIRMATORY):
+        import glob as _glob
+        import json as _json
+        mans = sorted(_glob.glob(os.path.join("logs", "runs", a.campaign, "manifest-*.json")))
+        problems = completeness_problems(ep, _json.load(open(mans[0]))) if mans else ["no manifest"]
+        if problems:
+            raise SystemExit("unblind refused: " + "; ".join(problems))
+    if blind:
         lines += ["Outcomes are blinded: this is a confirmatory campaign and it is not unblinded "
                   f"(needs --unblind and the tag `locked-{a.campaign}`)."]
     else:

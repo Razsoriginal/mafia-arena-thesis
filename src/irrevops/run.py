@@ -15,6 +15,7 @@ import argparse
 import json
 import os
 import random
+import zlib
 import subprocess
 import time
 from concurrent.futures import FIRST_COMPLETED, ProcessPoolExecutor, wait
@@ -35,13 +36,72 @@ EPISODE_BOUND_INR = (2 * MAX_STEPS) * _est_cost_inr(3500, 2600)
 NONCONFIRMATORY = ("explore-", "pilot-", "smoke-")
 
 
+def stable_seed(rep: int, task_id: str) -> int:
+    """Seed for the simulated reviewer; identical across processes and
+    resumes (Python's hash() is salted per process; review m8)."""
+    return int(rep) * 7919 + zlib.crc32(task_id.encode("utf-8")) % 100003
+
+
+def console_line(campaign: str, row: dict, cost: float, n_done: int) -> str:
+    """One progress line. For a confirmatory campaign it carries a counter
+    and the cost only: no arm, task, twin, step count or how the episode
+    ended, since escalation is an outcome (review M8)."""
+    if campaign.startswith(NONCONFIRMATORY):
+        return (f"[{campaign}] {row['episode_id']}: steps={row['n_steps']} ended={row['ended']} "
+                f"parse_fails={row['agent_parse_fails']} Rs.{cost:.4f}")
+    return f"[{campaign}] episode {n_done} done Rs.{cost:.4f}"
+
+
+def append_row(path: str, row: dict):
+    """Append one episode as a JSON line, flushed to disk (review m13;
+    the crash of 2026-11-19)."""
+    with open(path, "a", encoding="utf-8") as f:
+        f.write(json.dumps(row, default=str) + "\n")
+        f.flush()
+        os.fsync(f.fileno())
+
+
+def read_rows(path: str) -> list:
+    """Episode rows. A torn last line from a crash is skipped; that
+    episode is simply not done and will be re-run."""
+    rows = []
+    if not os.path.exists(path):
+        return rows
+    with open(path, "rb") as f:
+        for line in f:
+            try:
+                rows.append(json.loads(line))
+            except Exception:
+                continue
+    return rows
+
+
+def done_ids(path: str) -> set:
+    return {r["episode_id"] for r in read_rows(path)}
+
+
+def compact(jsonl_path: str, parquet_path: str):
+    rows = read_rows(jsonl_path)
+    if rows:
+        tmp = parquet_path + ".tmp"
+        pd.DataFrame(rows).to_parquet(tmp, index=False)
+        os.replace(tmp, parquet_path)
+    return len(rows)
+
+
+def _provider_failed(meta: dict) -> bool:
+    """True when the client got no reply at all after its retries. Bad
+    JSON from the model is behaviour, not infrastructure."""
+    return bool(meta.get("empty_raw"))
+
+
 def _step_fn():
     from src import llm_client as llm
 
     def step(system, user):
         meta = {}
         d = llm.chat_json(system, user, meta=meta, temperature=AGENT_TEMPERATURE, purpose="ops_step")
-        return d, bool(meta.get("parse_fail"))
+        return d, bool(meta.get("parse_fail")), _provider_failed(meta)
     return step
 
 
@@ -57,7 +117,7 @@ def _self_scorer(purpose="ops_verify"):
             conf = float(d.get("confidence", 0.0))
         except Exception:
             conf = 0.0
-        return max(0.0, min(1.0, conf)), d, bool(meta.get("parse_fail"))
+        return max(0.0, min(1.0, conf)), d, bool(meta.get("parse_fail")), _provider_failed(meta)
     return score
 
 
@@ -85,13 +145,19 @@ def _episode_worker(job):
     os.environ["MAFIA_RAW_DIR"] = job["raw_dir"]
     os.makedirs(job["raw_dir"], exist_ok=True)
     from .agent import run_episode
+    from .controls import InfraFailure
     task = {t.task_id: t for t in build_tasks()}[job["task_id"]]
     control = make_control(job["arm"], job["cfg"])
     t0 = time.time()
-    row = run_episode(task, control, _step_fn(), episode_id=job["episode_id"],
-                      human_error_rate=job["cfg"].get("human_error_rate", 0.0),
-                      rng=random.Random(job["rep"] * 7919 + hash(job["task_id"]) % 100003))
+    try:
+        row = run_episode(task, control, _step_fn(), episode_id=job["episode_id"],
+                          human_error_rate=job["cfg"].get("human_error_rate", 0.0),
+                          rng=random.Random(stable_seed(job["rep"], job["task_id"])))
+    except InfraFailure as e:
+        return {"infra_failed": True, "episode_id": job["episode_id"], "task_id": job["task_id"],
+                "arm": job["arm"], "rep": job["rep"], "attempt": job.get("attempt", 1), "error": str(e)[:200]}
     row["wall_s"] = round(time.time() - t0, 2)
+    row["attempt"] = job.get("attempt", 1)
     return row
 
 
@@ -148,7 +214,13 @@ def main():
     out_dir = os.path.join("logs", "runs", a.campaign)
     os.makedirs(out_dir, exist_ok=True)
     ep_path = os.path.join(out_dir, "episodes.parquet")
-    done = set(pd.read_parquet(ep_path)["episode_id"]) if os.path.exists(ep_path) else set()
+    jl_path = os.path.join(out_dir, "episodes.jsonl")
+    infra_path = os.path.join(out_dir, "infra_failures.jsonl")
+    if os.path.exists(ep_path) and not os.path.exists(jl_path):   # a bundle written before the JSONL format
+        for r in pd.read_parquet(ep_path).to_dict("records"):
+            append_row(jl_path, r)
+    done = done_ids(jl_path)
+    gave_up = {r["episode_id"] for r in read_rows(infra_path) if r.get("attempt", 1) >= 2}
     manifest = {"campaign": a.campaign, "started_at": datetime.now(timezone.utc).isoformat(),
                 "git_sha": _git_sha(), "task_set_version": TASK_SET_VERSION,
                 "task_set_sha256": task_set_sha256(), "arms": arms, "splits": sorted(splits),
@@ -170,9 +242,9 @@ def main():
         for t in tasks:
             for arm in arms:
                 eid = f"{a.campaign}-{t.task_id}-{arm}-r{rep}"
-                if eid not in done:
+                if eid not in done and eid not in gave_up:
                     jobs.append({"campaign": a.campaign, "task_id": t.task_id, "arm": arm, "rep": rep,
-                                 "episode_id": eid, "cfg": cfg,
+                                 "episode_id": eid, "cfg": cfg, "attempt": 1,
                                  "raw_dir": os.path.join(out_dir, "raw", eid)})
 
     def campaign_spend():
@@ -214,16 +286,22 @@ def main():
                                   campaign=a.campaign, status=status, source="irrevops")
                 if row is None:
                     continue
+                if row.get("infra_failed"):
+                    # Pre-reg v3 SS7: re-run once in a fresh raw directory;
+                    # a second failure leaves the cell missing and listed.
+                    append_row(infra_path, row)
+                    if job.get("attempt", 1) < 2 and not stop:
+                        jobs.append(dict(job, attempt=2, raw_dir=job["raw_dir"] + "-a2"))
+                    continue
                 row.update({"campaign": a.campaign, "rep": job["rep"], "cost_inr": round(cost, 6),
                             "git_sha": manifest["git_sha"], "task_set_sha256": manifest["task_set_sha256"],
                             "requested_model": settings.model, "reasoning_effort": manifest["reasoning_effort"]})
-                ra._upsert(ep_path, pd.DataFrame([row]), ["episode_id"])
+                append_row(jl_path, row)
                 n_ok += 1
-                # Nuisance only on the console: no outcome is printed.
-                print(f"[{a.campaign}] {row['episode_id']}: steps={row['n_steps']} ended={row['ended']} "
-                      f"parse_fails={row['agent_parse_fails']} Rs.{cost:.4f}", flush=True)
+                print(console_line(a.campaign, row, cost, len(done) + n_ok), flush=True)
     finally:
         ex.shutdown(wait=True, cancel_futures=True)
+        compact(jl_path, ep_path)
     print(f"[{a.campaign}] {n_ok} episodes this run; campaign spend Rs.{campaign_spend():.4f}; "
           f"ledger Rs.{ra._ledger_total(ledger):.2f}")
 

@@ -6,7 +6,7 @@ it is injected so the loop is testable without any provider.
 """
 import json
 
-from .controls import ALLOW, BLOCK, ESCALATE, human_review
+from .controls import ALLOW, BLOCK, ESCALATE, InfraFailure, human_review
 from .world import ALL_TOOLS, IRREVERSIBLE, TERMINAL, TOOL_DOC, World, action_key, score_episode, target_of
 
 MAX_STEPS = 12
@@ -43,7 +43,12 @@ def run_episode(task, control, step_fn, episode_id: str = "", human_error_rate: 
     system = SYSTEM + control.system_suffix
     steps, reviews, parse_fails, n_human = [], [], 0, 0
     for step in range(1, max_steps + 1):
-        d, pf = step_fn(system, user_prompt(task, steps))
+        out = step_fn(system, user_prompt(task, steps))
+        d, pf = out[0], out[1]
+        if len(out) > 2 and out[2]:
+            # No reply from the provider after the client's retries: abort.
+            # This is infrastructure, not behaviour (review M7).
+            raise InfraFailure(f"agent provider failure at step {step}")
         d = d if isinstance(d, dict) else {}
         parse_fails += int(bool(pf))
         tool = str(d.get("tool", "") or "")
@@ -103,6 +108,7 @@ def run_episode(task, control, step_fn, episode_id: str = "", human_error_rate: 
         "agent_parse_fails": parse_fails,
         "reviews": json.dumps(reviews, default=str),
         "executed": json.dumps(world.executed, default=str),
-        "steps": json.dumps(steps, default=str)[:40000],
+        # Clip each output, never the JSON text itself (review m14).
+        "steps": json.dumps([dict(st, output=str(st["output"])[:2000]) for st in steps], default=str),
     })
     return out
