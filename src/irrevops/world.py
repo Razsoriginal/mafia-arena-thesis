@@ -109,7 +109,9 @@ class Platform:
 
     def referenced_by(self, rid) -> list:
         """Other live resources whose record names `rid` (as a value, in a
-        list, or as the prefix of a pinned reference such as "x@head")."""
+        list, or as the prefix of a pinned reference such as "x@head").
+        A snapshot's "of" field is not counted: a backup outlives its
+        source and does not depend on it."""
         def names(v):
             if isinstance(v, str):
                 return v == rid or v.startswith(rid + "@")
@@ -118,7 +120,7 @@ class Platform:
             return False
         return sorted(o for o, v in self._res.items()
                       if o != rid and not v["deleted"]
-                      and any(k != "notes_ref" and names(val) for k, val in v["meta"].items()))
+                      and any(k not in ("notes_ref", "of") and names(val) for k, val in v["meta"].items()))
 
     def dump(self) -> dict:
         return {"resources": self._res, "approvals": self._approvals}
