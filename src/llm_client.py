@@ -36,6 +36,13 @@ except ValueError:
     HTTP_TIMEOUT_S = 120.0
 
 
+def reasoning_effort():
+    """Reasoning regime (an explicit study factor). None = provider default.
+    Set LLM_REASONING_EFFORT=minimal|low|medium|high; recorded on every row."""
+    v = os.getenv("LLM_REASONING_EFFORT", "").strip().lower()
+    return v or None
+
+
 def expected_realised_model():
     """Frozen realised model string, or None when no guard is set."""
     v = os.getenv("MAFIA_EXPECT_REALISED_MODEL", "").strip()
@@ -100,7 +107,8 @@ def _log_jsonl(name: str, payload: dict):
 
 
 PURPOSES = {"speak", "dmn_reason", "tpn_reason", "night", "vote",
-            "probe", "repair", "judge", "bridge_step", "bridge_verify"}
+            "probe", "repair", "judge", "bridge_step", "bridge_verify",
+            "ops_step", "ops_verify", "ops_monitor"}
 # AiCredits catalog rates (USD/token) + INR/USD, billing markup 1.10.
 # Duplicated from run_arena so per-call estimates do not need an import.
 _MUSE_IN, _MUSE_OUT, _INR_PER_USD, _BILLING_MARKUP = 1e-07, 2e-07, 94.834253, 1.10
@@ -182,6 +190,7 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "sdk_max_retries": SDK_MAX_RETRIES,
         "http_timeout_s": HTTP_TIMEOUT_S,
         "expected_realised_model": expected_realised_model(),
+        "reasoning_effort": reasoning_effort(),
         "cost_inr": float(cost_inr or 0.0),
         "cost_estimated": bool(cost_estimated),
         "error": (str(error)[:300] if error else None),
@@ -269,6 +278,8 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             }
             if use_format:
                 kwargs["response_format"] = use_format
+            if reasoning_effort():
+                kwargs["reasoning_effort"] = reasoning_effort()
             resp = client.chat.completions.create(**kwargs)
             _bump("calls")
             pt = ct = 0

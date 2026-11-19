@@ -84,6 +84,25 @@ class TestClientHardening(unittest.TestCase):
         self.assertEqual(len(calls), 1)
         self.assertEqual(self._rows()[-1]["error_class"], "serving_drift")
 
+    def test_reasoning_effort_is_sent_and_recorded_only_when_set(self):
+        seen = []
+
+        def create(**kw):
+            seen.append(kw)
+            return _resp("ok")
+
+        with patch.object(llm_client, "get_client") as gc:
+            gc.return_value.chat.completions.create.side_effect = create
+            with patch.dict(os.environ, {"LLM_REASONING_EFFORT": ""}):
+                llm_client.chat_text("s", "u", temperature=0.0)
+            with patch.dict(os.environ, {"LLM_REASONING_EFFORT": "minimal"}):
+                llm_client.chat_text("s", "u", temperature=0.0)
+        self.assertNotIn("reasoning_effort", seen[0])
+        self.assertEqual(seen[1]["reasoning_effort"], "minimal")
+        rows = self._rows()
+        self.assertIsNone(rows[-2]["reasoning_effort"])
+        self.assertEqual(rows[-1]["reasoning_effort"], "minimal")
+
     def test_matching_model_passes(self):
         os.environ["MAFIA_EXPECT_REALISED_MODEL"] = "meta/muse-spark-1.3-contributor"
         with patch.object(llm_client, "get_client") as gc:
