@@ -1,0 +1,44 @@
+{
+  "campaign": "pilot-cal-A-01",
+  "started_at": "2026-11-19T12:36:04.682541+00:00",
+  "git_sha": "eedf0d408faa1a937a653403f37c85d53140ad3c",
+  "task_set_version": 3,
+  "task_set_sha256": "72c107caa356e939f916385f15a8a14293b5a179ff5fc7dd3c3922aedefe3660",
+  "arms": [
+    "L0_bare",
+    "L2_self_verify"
+  ],
+  "splits": [
+    "cal"
+  ],
+  "reps": [
+    300700
+  ],
+  "n_tasks": 140,
+  "lane_cap_inr": 70.0,
+  "episode_bound_inr": 2.178144,
+  "max_steps": 12,
+  "requested_model": "meta/muse-spark-1.3-contributor",
+  "base_url": "https://aicredits.in/v1",
+  "max_tokens": 2500,
+  "agent_temperature": 0.7,
+  "scorer_temperature": 0.0,
+  "reasoning_effort": null,
+  "sdk_max_retries": 0,
+  "http_timeout_s": 120.0,
+  "client_max_attempts": 8,
+  "expected_realised_model": null,
+  "expected_monitor_model": null,
+  "backbone": "A",
+  "cfg": {
+    "agent_role": null,
+    "monitor_role": null,
+    "l2_threshold": 0.0,
+    "l4_threshold": null,
+    "l5b_lo": null,
+    "human_error_rate": 0.0
+  },
+  "confirmatory": false,
+  "runpath_sha256": "51d47889d5a9e08f7404ab265d8e2b44477ea87feb8c0087ccaf09c3f4d7d0fb",
+  "prompts_sha256": "03aa890f3c552d8ce784d40638307d4573071c0c0f1fdfa532fe840b5693644f"
+}
