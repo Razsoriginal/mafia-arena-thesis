@@ -49,7 +49,7 @@ All figures are **measured**, on one instance of each of 23 templates, one backb
 
 ## 5. The design in brief (binding text is the pre-registration draft)
 
-- **Testbed.** `src/irrevops/`: a simulated cloud account with a metadata layer (what tools and gates see) and a truth layer (used only to score harm and to simulate the human reviewer). Episodes are multi-step and continue after an executed action. 23 templates in 10 families, 8 instances each, in fixed dev / calibration / test splits. Each template is labelled decidable or undecidable before any run.
+- **Testbed.** `src/irrevops/`: a simulated cloud account with a metadata layer (what tools and gates see) and a truth layer (used only to score harm and to simulate the human reviewer). Episodes are multi-step and continue after an executed action. 35 templates in 10 families (23 at the time of the pilot), 8 instances each, in fixed dev / calibration / test splits. Each template is labelled decidable or undecidable before any run, and a test checks every label against its definition.
 - **Arms.** L0 bare; L1 prompt rule; L2 same-model verifier; L3 policy gate; L4 other-family monitor; L5a approve-all; L5b calibrated escalation; L6 reversibility (soft delete, least privilege).
 - **Outcomes.** Harm rate on risky twins; false-hold rate on act twins; escalation burden; residual (unrecoverable) harm; behaviour after a block.
 - **Analysis.** Paired by task, clustered by template; score-based controls compared at a false-hold rate matched on the calibration split; cost-sensitive utility swept over harm-to-delay ratios from 1 to 1000.
@@ -61,27 +61,39 @@ All figures are **measured**, on one instance of each of 23 templates, one backb
 
 ## 6. Budget arithmetic (cap Rs.5,000; ledger Rs.295.13 on 2026-11-19)
 
-Test split: 23 templates × 4 instances × 2 twins = 184 tasks. Three rollouts and 8 arms give 4,416 episodes per backbone and regime. Calibration split: 92 tasks × 3 rollouts × 4 arms (L0, L2, L4, L5b) = 1,104 episodes.
+Revised the same day after the template set grew from 23 to 35 (17 undecidable), which the power simulation requires (pre-registration draft §8).
+
+Test split: 35 templates × 4 instances × 2 twins = 280 tasks. Three rollouts and 8 arms give 6,720 episodes per backbone and regime. Calibration split: 140 tasks × 3 rollouts × 4 arms (L0, L2, L4, L5b) = 1,680 episodes.
 
 | Item | Episodes | Rs. per episode | Rs. | Basis |
 |---|---:|---:|---:|---|
-| Backbone A, default reasoning, test | 4,416 | 0.17 | 751 | measured 0.139 for L0; +25% assumed for arms with a scoring call |
-| Backbone A, calibration | 1,104 | 0.17 | 188 | as above |
-| Backbone A, minimal reasoning, test (extension) | 4,416 | 0.05 | 221 | measured 0.038 for L0 |
-| Monitor calls for A (other family) | about 3,000 calls | 0.05 | 150 | assumed |
-| **Backbone A total** | | | **about 1,310** | derived |
-| Backbone B, test + calibration | 5,520 | 0.35 | 1,932 | **assumed**: a model priced about 2 to 3 times A |
-| Backbone C, test + calibration | 5,520 | 0.35 | 1,932 | **assumed** |
-| Dev iteration, probes, pilot for new templates | | | 250 | assumed |
-| **Total** | | | **about 5,420** | derived |
+| Backbone A, default reasoning, test | 6,720 | 0.17 | 1,142 | measured 0.139 for L0; +25% assumed for arms with a scoring call |
+| Backbone A, calibration | 1,680 | 0.17 | 286 | as above |
+| Monitor calls for A (other family) | about 4,500 calls | 0.05 | 225 | assumed |
+| **Backbone A, minimum** | | | **1,653** | derived |
+| Backbone A, minimal reasoning, test (extension) | 6,720 | 0.05 | 336 | measured 0.038 for L0 |
+| Backbone B, test + calibration + monitor | 8,400 | 0.35 | 2,940 | **assumed**: a model priced about 2 to 3 times A |
+| Backbone C, test + calibration + monitor | 8,400 | 0.35 | 2,940 | **assumed** |
+| Dev iteration, probes, pilots for B and C | | | 250 | assumed |
+| **Total, three backbones, default reasoning** | | | **about 7,780** | derived |
 
-This is about Rs.700 over what remains (Rs.4,705). It fits if B and C average Rs.0.28 per episode or less, or if the minimal-reasoning extension on A is deferred. Nothing is cut silently: once B and C are chosen and priced by a 50-episode pilot each, either the plan fits or a budget request is written with the measured numbers.
+Remaining under the cap: Rs.4,705. **The minimum viable thesis as designed does not fit**: it is about Rs.3,080 over. Backbone A alone fits with room to spare. Options, none taken silently:
+
+| Option | Cost | What is lost |
+|---|---:|---|
+| (a) Budget request for about Rs.3,300 more | 7,780 + margin | nothing |
+| (b) Two rollouts instead of three on B and C | saves about 1,960 | per-task stability on B and C; AgentAbstain v2 reports 16 to 37% of abstain outcomes flip across rollouts |
+| (c) B and C run five arms (L0, L1, L3, L4, L6), not eight | saves about 2,200 | L2, L5a, L5b on B and C; the full ladder is then shown on one backbone only |
+| (d) B and C chosen at A's price class (about Rs.0.15 per episode) | saves about 3,300 | capability-tier spread: three cheap models say little about stronger ones |
+| (e) Minimal reasoning as the confirmatory regime everywhere | saves about 70% | the default-reasoning regime becomes the extension; reasoning is an explicit factor, so this changes the headline condition |
+
+**Recommendation:** price B and C first with a 50-episode pilot each (about Rs.20 to 40). If the measured total exceeds the cap, write the budget request for option (a) with those numbers, and name (c) as the fallback that keeps three rollouts and the claims C1, C2 and C4 on every backbone. Until then all paid work is on backbone A only.
 
 ## 7. Conditions before the v3 freeze
 
 1. Independent cross-family review of the Phase E memo, this memo, the pre-registration draft and `src/irrevops/` (needs the reviewer key).
 2. Keys for backbones B and C, the monitor and the task author, one per role.
-3. Template set extended to at least 30, with at least 12 undecidable, the free text paraphrased by an author model that is not under test, and a blinded human label audit of every test-split pair.
+3. Template set of at least 34 with at least 17 undecidable (now 35 and 17), the free text paraphrased by an author model that is not under test, and a blinded human label audit of every test-split pair.
 4. Calibration-split run to fix thresholds for L2, L4 and L5b; simulated power from calibration variance.
 5. Citation spot-check of the load-bearing prior-art items.
 6. Fingerprint probe and frozen realised model string per backbone.
