@@ -19,6 +19,12 @@ class TestPilotRegression(unittest.TestCase):
             tdf = tdf[tdf["campaign"].isna()]
         if "campaign" in vdf.columns:
             vdf = vdf[vdf["campaign"].isna()]
+        gdf = pd.read_parquet("logs/games.parquet")
+        if "campaign" in gdf.columns:
+            gdf = gdf[gdf["campaign"].isna()]
+        # E4-U2: all 14 pilot game rows are present (the table once held 5).
+        self.assertEqual(len(gdf), 14)
+        self.assertAlmostEqual(float(gdf["billed_cost_inr"].sum()), 30.9193, places=3)
         pairs = [(float(t), 0 if bool(m) else 1) for t, m in zip(tdf["trust"], tdf["target_is_mafia"])]
         self.assertEqual(len(pairs), 41)
         self.assertAlmostEqual(ece(pairs), 0.105, places=3)
