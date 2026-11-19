@@ -51,18 +51,19 @@ def _md_table(df):
 
 
 def nuisance(g, v, t, out):
-    rows = []
-    for arm, gg in g.groupby("arm"):
-        cost = gg["billed_cost_inr"].where(gg["billed_cost_inr"] > 0, gg.get("est_cost_inr"))
-        pt = t[(t.get("arm") == arm) & (t.get("trust_source") == "probe")] if len(t) else pd.DataFrame()
-        rows.append({"arm": arm, "games": len(gg), "cost_total_inr": float(cost.sum()),
-                     "cost_mean_inr": float(cost.mean()), "json_failures_per_game": float(gg["json_failures"].mean()),
-                     "mean_days": float(gg["days"].mean()),
-                     "probe_missing_rate": float(pt["parse_fail"].astype(bool).mean()) if len(pt) else float("nan")})
-    df = pd.DataFrame(rows)
+    """Pooled over arms (E7-K5). Game length, failure counts and cost by
+    arm are post-treatment quantities; pre-reg v2 SS9 allows pooled values
+    only before the lock."""
+    cost = g["billed_cost_inr"].where(g["billed_cost_inr"] > 0, g.get("est_cost_inr"))
+    pt = t[t.get("trust_source") == "probe"] if len(t) and "trust_source" in t.columns else pd.DataFrame()
+    df = pd.DataFrame([{"games": len(g), "seeds": int(g["requested_seed"].nunique()),
+                        "cost_total_inr": float(cost.sum()), "cost_mean_inr": float(cost.mean()),
+                        "json_failures_per_game": float(g["json_failures"].mean()),
+                        "mean_days": float(g["days"].mean()),
+                        "probe_missing_rate": float(pt["parse_fail"].astype(bool).mean()) if len(pt) else float("nan")}])
     with open(os.path.join(out, "nuisance.md"), "w") as f:
-        f.write("# Nuisance quantities (blind-safe)\n\nPer arm; cost is billed Rs. (estimate fallback). "
-                "No outcome quantity appears here.\n\n" + _md_table(df) + "\n")
+        f.write("# Nuisance quantities (blind-safe)\n\nPooled over arms; cost is billed Rs. (estimate fallback). "
+                "No outcome quantity and no per-arm quantity appears here.\n\n" + _md_table(df) + "\n")
     return df
 
 
