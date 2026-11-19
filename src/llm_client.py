@@ -102,6 +102,8 @@ def _log_jsonl(name: str, payload: dict):
             os.makedirs(_raw_dir(), exist_ok=True)
             with open(os.path.join(_raw_dir(), name), "a", encoding="utf-8") as f:
                 f.write(line)
+                f.flush()
+                os.fsync(f.fileno())  # E8: billed calls must survive a crash
     except Exception:
         pass
 

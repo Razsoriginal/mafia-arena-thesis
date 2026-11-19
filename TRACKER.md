@@ -4,8 +4,8 @@
 
 - **Phase:** E done (awaiting independent review). S done as reported by sub-agents (spot-check pending). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run.
 - **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is now a controls ladder on IrrevOps v3 (`src/irrevops/`); Mafia is an exploratory stress test. See `docs/decisions/2026-11-19-master-reevaluation.md` and `docs/decisions/2026-11-19-design-decision-v3.md`.
-- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.295.13** of the **Rs.5,000** cap.
-- **Tests:** 193 pass (`.venv/bin/python -m unittest discover -s tests`).
+- **Ledger:** `logs/spend_ledger.jsonl`. **DAMAGED by a machine crash on 2026-11-19 (null bytes at the end); paid work is STOPPED** until the user approves the repair in `docs/decisions/2026-11-19-ledger-crash.md`. Valid total Rs.329.12 of the Rs.5,000 cap, plus at most Rs.1.00 unledgered. Do not edit the ledger without that approval.
+- **Tests:** 218 pass (`.venv/bin/python -m unittest discover -s tests`).
 - **In-flight jobs:** none.
 - **Campaigns so far on v3 (exploratory, dev split, seeds >= 100000):** `explore-ops-00`, `explore-ops-01`, `explore-ops-02-minimal` (D-013).
 - **Blocked on the user:** reviewer key, keys for backbones B and C, a monitor and a task author, one billing check, and later a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).

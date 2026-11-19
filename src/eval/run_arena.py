@@ -992,6 +992,13 @@ def _ledger_entries(path: str) -> list:
             try:
                 entries.append(json.loads(line))
             except Exception as e:
+                if line.strip("\x00\r\n ") == "":
+                    # E8: an unclean shutdown extends the file without
+                    # flushing the data. Name it; never repair it here.
+                    raise RuntimeError(
+                        f"spend ledger corrupt at {path}:{i}: the file ends in null bytes after "
+                        f"{len(entries)} valid rows (an interrupted write). Refusing to continue; "
+                        f"see docs/decisions/2026-11-19-ledger-crash.md for the repair procedure.") from e
                 raise RuntimeError(
                     f"spend ledger corrupt at {path}:{i}: unparseable line; "
                     f"refusing to continue (fix or archive the ledger): {e}") from e
@@ -1047,6 +1054,8 @@ def _append_ledger(path: str, row: dict, campaign: str = "", status: str = "kept
         }
         with open(path, "a", encoding="utf-8") as f:
             f.write(json.dumps(rec) + "\n")
+            f.flush()
+            os.fsync(f.fileno())  # E8: a crash may lose this row, never leave a null-filled tail
 
 
 def _raw_spend(raw_dir: str) -> float:
