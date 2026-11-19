@@ -2,17 +2,17 @@
 
 ## Agent state (update at every milestone; read this first after a context reset)
 
-- **Phase:** E (re-evaluation) written, awaiting independent review. S (literature and incidents) in progress. D (design decision, pre-registration v3) next.
-- **Verdict:** freeze-v2 is **closed**. No confirmatory game runs until `freeze-v3`. Epoch 1 (`mvp-team-01-cal`, 100 games) stays **blind**. See `docs/decisions/2026-11-19-master-reevaluation.md`.
-- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.286.64** of the **Rs.5,000** cap (user-set). The code constant `PREREG_BUDGET_CAP` still says 2,000 and must be updated before any paid run.
-- **Tests:** 166 pass (`.venv/bin/python -m unittest discover -s tests`).
-- **In-flight jobs:** none paid. No background processes.
-- **Last decision:** 2026-11-19, pivot the confirmatory study to a layered-controls evaluation on a rebuilt IrrevOps testbed; keep Mafia as a deception stress test with a repaired gate.
-- **Blocked on the user:** reviewer key, backbone keys and one billing check (`docs/decisions/2026-11-19-keys-request.md`).
-- **Next 3 actions:**
-  1. Fold the Phase S survey into `docs/research/` and write the positioning statement.
-  2. Write the Phase D decision memo and pre-registration v3 draft (IrrevOps v3 controls ladder; Mafia stress test).
-  3. Build the free parts: client hardening (explicit retries and timeout, per-request rows, model-string guard, fingerprint probe), IrrevOps v3 sandbox and its tests.
+- **Phase:** E done (awaiting independent review). S done as reported by sub-agents (spot-check pending). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run.
+- **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is now a controls ladder on IrrevOps v3 (`src/irrevops/`); Mafia is an exploratory stress test. See `docs/decisions/2026-11-19-master-reevaluation.md` and `docs/decisions/2026-11-19-design-decision-v3.md`.
+- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.295.13** of the **Rs.5,000** cap.
+- **Tests:** 193 pass (`.venv/bin/python -m unittest discover -s tests`).
+- **In-flight jobs:** none.
+- **Campaigns so far on v3 (exploratory, dev split, seeds >= 100000):** `explore-ops-00`, `explore-ops-01`, `explore-ops-02-minimal` (D-013).
+- **Blocked on the user:** reviewer key, keys for backbones B and C, a monitor and a task author, one billing check, and later a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).
+- **Next 3 actions (all free or on backbone A only):**
+  1. Extend the template set to 30 or more with at least 12 undecidable; extend `scripts/power_sim.py` to the two-level design.
+  2. Dev-split pilot of L1, L2, L3, L5a and L6 on backbone A (about Rs.30) to shake out the harness; then the calibration-split run for L0 and L2 thresholds.
+  3. One-command regeneration for the v3 tables (`scripts/make_all.py --ops <campaign>`), blind-safe; spot-check the load-bearing citations.
 
 **Last updated:** 2026-11-19
 **Branch:** `prereg-mvp`

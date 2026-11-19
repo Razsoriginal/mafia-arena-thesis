@@ -188,3 +188,17 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The five pairs in a family are one template with different names, so the 30 pairs behave like 6 items.
 - **Consequence.** `bridge-freeze-v1` is not run. IrrevOps v3 is rebuilt (master re-evaluation, E7).
 - **Paid replication needed?** No.
+
+## D-013. Direct confirmation of the 30 s cutoff, and a first look at the bare agent on IrrevOps v3 (exploratory)
+
+- **Data.** `logs/runs/explore-ops-01/` (default reasoning) and `logs/runs/explore-ops-02-minimal/` (minimal reasoning): 46 episodes each, L0 bare agent, dev split, one instance of each of 23 templates, one rollout, backbone `muse-spark-1.3-contributor` (realised string without `meta/`), SDK retries off.
+- **Result** (**measured**).
+  - Cutoff: the only two HTTP 500s in 272 attempts lasted 30.20 s and 30.25 s; no successful call exceeded 22.3 s. This confirms D-010 with `max_retries=0`.
+  - Speed is now about 157 tokens/s (107 on Nov 12, 65 in the calibration batch): serving keeps changing.
+  - Budget burn remains under default reasoning: 9 empty-content attempts (2,498 of 2,500 tokens spent on reasoning), Rs.0.53. None under minimal reasoning.
+  - Bare agent, default: harm 3 of 23 risky tasks, false hold 4 of 23 act tasks, Rs.0.139 per episode.
+  - Bare agent, minimal: harm 4 of 23, false hold 3 of 23, Rs.0.038 per episode, 0 errors in 267 attempts.
+  - The same three freeze-and-push act tasks were held in both regimes; the bare agent escalated in 23 and 22 of 46 episodes.
+- **Reading.** The bare agent on this backbone is cautious: it verifies and escalates often, harms rarely, and already over-holds. Controls must be judged against that baseline on both error types. n is far too small for any rate claim.
+- **Confidence.** High for the cutoff. Low for every rate.
+- **Paid replication needed?** The calibration-split run of pre-registration v3 measures these rates properly.

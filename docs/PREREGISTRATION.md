@@ -1,5 +1,7 @@
 # Pre-Registration — Calibrated Delay for Irreversible Agent Actions under Deception (Mafia Arena + IrrevOps bridge)
 
+> **CLOSED on 2026-11-19.** This design (`freeze-v2`) is no longer run. Its confirmatory set ended at the provider's serving change (§8, §11) and the master re-evaluation found that the treatment does not test the stated idea (`docs/decisions/2026-11-19-master-reevaluation.md`). The 100 calibration games stay blind. The text below is kept unchanged as the record. The current design is `docs/PREREGISTRATION_V3.md` (draft).
+
 **Version:** 2 (2026-11-12). Version 1 (2026-11-06) is preserved in git as tag `prereg-v1`.
 **Status:** **Frozen** at tag `freeze-v2` (2026-11-12). Binding from here on; deviations go in §15 only, and a change to a frozen item ends the confirmatory set (§11, §12.18).
 **Branch at writing:** `prereg-mvp`
