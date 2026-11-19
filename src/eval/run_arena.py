@@ -180,7 +180,7 @@ def _runpath_files():
             for name in sorted(files):
                 if name.endswith(".py"):
                     rels.append(os.path.relpath(os.path.join(dirpath, name), root))
-    rels += ["llm_client.py", "config.py", os.path.join("eval", "run_arena.py")]
+    rels += ["llm_client.py", "roles.py", "config.py", os.path.join("eval", "run_arena.py")]
     return [os.path.join(root, r) for r in sorted(rels)]
 
 

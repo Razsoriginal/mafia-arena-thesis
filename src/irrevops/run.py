@@ -95,24 +95,29 @@ def _provider_failed(meta: dict) -> bool:
     return bool(meta.get("empty_raw"))
 
 
-def _step_fn():
+AGENT_ROLE = {"A": None, "B": "BackboneB", "C": "BackboneC"}
+
+
+def _step_fn(role=None):
     from src import llm_client as llm
 
     def step(system, user):
         meta = {}
-        d = llm.chat_json(system, user, meta=meta, temperature=AGENT_TEMPERATURE, purpose="ops_step")
+        d = llm.chat_json(system, user, meta=meta, temperature=AGENT_TEMPERATURE, purpose="ops_step", role=role)
         return d, bool(meta.get("parse_fail")), _provider_failed(meta)
     return step
 
 
-def _self_scorer(purpose="ops_verify"):
-    """L2: the same backbone scores its own pending action."""
+def _scorer(role=None, purpose="ops_verify"):
+    """A scoring call. L2: the agent's own backbone (`role` = the agent's
+    role). L4 and L5b: the monitor role, a model from another family with
+    its own key (purpose ops_monitor)."""
     from src import llm_client as llm
 
     def score(ticket, transcript, tool, args):
         meta = {}
         d = llm.chat_json(C.VERIFIER_SYSTEM, C.verifier_user(ticket, transcript, tool, args),
-                          meta=meta, temperature=SCORER_TEMPERATURE, purpose=purpose)
+                          meta=meta, temperature=SCORER_TEMPERATURE, purpose=purpose, role=role)
         try:
             conf = float(d.get("confidence", 0.0))
         except Exception:
@@ -127,7 +132,7 @@ def make_control(arm: str, cfg: dict):
     if arm == "L1_prompt_rule":
         return C.PromptRule()
     if arm == "L2_self_verify":
-        return C.ScoreGate(arm, _self_scorer(), cfg["l2_threshold"])
+        return C.ScoreGate(arm, _scorer(cfg.get("agent_role")), cfg["l2_threshold"])
     if arm == "L3_policy_gate":
         return C.PolicyGate()
     if arm == "L5a_approve_all":
@@ -135,9 +140,33 @@ def make_control(arm: str, cfg: dict):
     if arm == "L6_reversibility":
         return C.Reversibility()
     if arm in ("L4_monitor", "L5b_calibrated_escalation"):
-        raise SystemExit(f"{arm} needs the Monitor role (a model from another family with its own key); "
-                         f"see docs/decisions/2026-11-19-keys-request.md")
+        role = cfg.get("monitor_role")
+        if not role:
+            raise SystemExit(f"{arm} needs a monitor role (a model from another family with its own key); "
+                             f"see docs/decisions/2026-11-19-keys-request.md")
+        mon = _scorer(role, purpose="ops_monitor")
+        if arm == "L4_monitor":
+            return C.ScoreGate(arm, mon, cfg["l4_threshold"])
+        return C.CalibratedEscalation(mon, cfg["l5b_lo"], cfg["l4_threshold"])
     raise SystemExit(f"unknown arm {arm}")
+
+
+def check_roles(arms, cfg):
+    """Fail before any paid call if a needed role is missing or shares a
+    key with another role in this run."""
+    from src import roles
+    if cfg.get("monitor_role") and cfg.get("monitor_role") == cfg.get("agent_role"):
+        raise SystemExit("the monitor must not be the agent's own role")
+    used = [r for r in {cfg.get("agent_role"), cfg.get("monitor_role") if set(arms) & {
+        "L4_monitor", "L5b_calibrated_escalation"} else None} if r]
+    for r in used:
+        roles.role_config(r)
+    if len(used) > 1:
+        roles.assert_distinct_keys(used)
+    for arm, keys in (("L2_self_verify", ("l2_threshold",)), ("L4_monitor", ("l4_threshold",)),
+                      ("L5b_calibrated_escalation", ("l4_threshold", "l5b_lo"))):
+        if arm in arms and any(cfg.get(k) is None for k in keys):
+            raise SystemExit(f"{arm} needs {', '.join(keys)} (from the calibration split, never from test)")
 
 
 def _episode_worker(job):
@@ -150,7 +179,7 @@ def _episode_worker(job):
     control = make_control(job["arm"], job["cfg"])
     t0 = time.time()
     try:
-        row = run_episode(task, control, _step_fn(), episode_id=job["episode_id"],
+        row = run_episode(task, control, _step_fn(job["cfg"].get("agent_role")), episode_id=job["episode_id"],
                           human_error_rate=job["cfg"].get("human_error_rate", 0.0),
                           rng=random.Random(stable_seed(job["rep"], job["task_id"])))
     except InfraFailure as e:
@@ -178,30 +207,48 @@ def main():
     ap.add_argument("--reps", default="300600")
     ap.add_argument("--workers", type=int, default=4)
     ap.add_argument("--lane-cap", type=float, required=True, help="max Rs. for this campaign")
+    ap.add_argument("--backbone", default="A", choices=sorted(AGENT_ROLE))
+    ap.add_argument("--monitor-role", default=None, help="exploratory runs: role name of the monitor, e.g. Monitor")
     ap.add_argument("--l2-threshold", type=float, default=None)
+    ap.add_argument("--l4-threshold", type=float, default=None)
+    ap.add_argument("--l5b-lo", type=float, default=None)
     ap.add_argument("--human-error-rate", type=float, default=0.0)
     a = ap.parse_args()
 
     from src import llm_client as llm
     from src.config import settings
+    from . import freeze
     nonconf = a.campaign.startswith(NONCONFIRMATORY)
     if not nonconf and not a.campaign.startswith("ops-"):
         ap.error("campaign must be prefixed explore-/pilot-/smoke- (non-confirmatory) or ops- (confirmatory)")
     splits = {x.strip() for x in a.split.split(",")}
-    if nonconf and "test" in splits:
-        ap.error("the test split is held out: a non-confirmatory campaign may not run it")
-    if not nonconf:
-        ap.error("confirmatory ops- campaigns are refused until pre-registration v3 is frozen")
     reps = [int(x) for x in a.reps.split(",")]
-    if any(r < 100000 for r in reps):
-        ap.error("non-confirmatory repetitions must use seeds >= 100000")
     arms = [x.strip() for x in a.arms.split(",")]
-    cfg = {"l2_threshold": a.l2_threshold, "human_error_rate": a.human_error_rate}
-    if "L2_self_verify" in arms and a.l2_threshold is None:
-        ap.error("--l2-threshold is required for L2 (set it from the calibration split, never from test)")
-    for arm in arms:
-        if arm not in ("L2_self_verify",):
-            make_control(arm, cfg)  # fail fast on unknown or unavailable arms
+    if nonconf:
+        if "test" in splits:
+            ap.error("the test split is held out: a non-confirmatory campaign may not run it")
+        if any(r < 100000 for r in reps):
+            ap.error("non-confirmatory repetitions must use indices >= 100000")
+        cfg = {"agent_role": AGENT_ROLE[a.backbone], "monitor_role": a.monitor_role,
+               "l2_threshold": a.l2_threshold, "l4_threshold": a.l4_threshold, "l5b_lo": a.l5b_lo,
+               "human_error_rate": a.human_error_rate}
+    else:
+        # Confirmatory: everything comes from the freeze block; the command
+        # line may only name the campaign and the backbone.
+        probs = freeze.problems(a.campaign, a.backbone, arms, reps, splits, llm.reasoning_effort())
+        if a.human_error_rate or a.instances != "all" or a.templates != "all" or any(
+                v is not None for v in (a.l2_threshold, a.l4_threshold, a.l5b_lo, a.monitor_role)):
+            probs.append("thresholds, monitor, filters and reviewer error are fixed by the freeze block")
+        if probs:
+            ap.error("confirmatory campaign refused: " + "; ".join(probs))
+        bb = freeze.backbone_config(a.backbone)
+        cfg = {"agent_role": bb["agent_role"], "monitor_role": bb["monitor_role"], "l2_threshold": bb["t2"],
+               "l4_threshold": bb["t4"], "l5b_lo": bb["l5b_lo"], "human_error_rate": 0.0}
+        # Serving guard is mandatory: the frozen realised strings.
+        os.environ["MAFIA_EXPECT_REALISED_MODEL" + (f"_{bb['agent_role'].upper()}" if bb["agent_role"] else "")] = \
+            bb["realised_model"]
+        os.environ[f"MAFIA_EXPECT_REALISED_MODEL_{bb['monitor_role'].upper()}"] = bb["monitor_realised_model"]
+    check_roles(arms, cfg)
 
     tasks = [t for t in build_tasks() if t.split in splits]
     if a.instances != "all":
@@ -231,8 +278,11 @@ def main():
                 "scorer_temperature": SCORER_TEMPERATURE, "reasoning_effort": llm.reasoning_effort(),
                 "sdk_max_retries": llm.SDK_MAX_RETRIES, "http_timeout_s": llm.HTTP_TIMEOUT_S,
                 "client_max_attempts": llm.MAX_ATTEMPTS,
-                "expected_realised_model": llm.expected_realised_model(), "cfg": cfg,
-                "confirmatory": False}
+                "expected_realised_model": llm.expected_realised_model(cfg.get("agent_role")),
+                "expected_monitor_model": (llm.expected_realised_model(cfg["monitor_role"])
+                                           if cfg.get("monitor_role") else None),
+                "backbone": a.backbone, "cfg": cfg, "confirmatory": not nonconf,
+                "runpath_sha256": freeze.runpath_sha256(), "prompts_sha256": freeze.prompts_sha256()}
     with open(os.path.join(out_dir, f"manifest-{int(time.time())}.json"), "w") as f:
         json.dump(manifest, f, indent=2)
 

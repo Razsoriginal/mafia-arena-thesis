@@ -7,15 +7,22 @@
 
 Figures are tagged **measured**, **derived** or **assumed**. Items marked **[open]** must be fixed before the freeze and may not be changed after it.
 
-<!-- freeze
-status: DRAFT
-task_set_sha256: PENDING
-runpath_sha256: PENDING
-prompts_sha256: PENDING
-freeze_git_sha: PENDING
-freeze_tag: PENDING
-backbones: PENDING
+<!-- freeze-v3
+{
+ "status": "DRAFT",
+ "freeze_tag": null,
+ "task_set_sha256": null,
+ "runpath_sha256": null,
+ "prompts_sha256": null,
+ "regime": "default",
+ "arms": ["L0_bare", "L1_prompt_rule", "L2_self_verify", "L3_policy_gate", "L4_monitor",
+          "L5a_approve_all", "L5b_calibrated_escalation", "L6_reversibility"],
+ "reps": [7001, 7002, 7003],
+ "backbones": {}
+}
 -->
+
+The block above is the machine-readable freeze identity. `src/irrevops/freeze.py` parses it. A confirmatory campaign (`ops-<backbone>-<nn>`) starts only if the status is FROZEN, the three hashes equal the current tree, the tag is an ancestor of HEAD, and the run is exactly the frozen arms, repetitions, regime and test split. Thresholds, the monitor and the expected model strings are read from the block, never from the command line. Each backbone entry holds: `agent_role`, `realised_model`, `monitor_role`, `monitor_realised_model`, `t2`, `t4`, `l5b_lo`, `cal_bare_harm_decidable`, `cal_bare_harm_undecidable`.
 
 ## 1. Question and scope
 
