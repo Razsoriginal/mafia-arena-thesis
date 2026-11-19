@@ -166,6 +166,11 @@ def main():
                 print(f"{arm}: games={len(g)} (outcomes blinded; pass --unblind)")
             print("Outcome-by-arm output withheld: pass --unblind after lock.")
         else:
+            if not args.campaign:
+                # E7-K3: without a campaign every team row in the table is
+                # pooled, which pools epochs (pre-reg v2 SS12.18).
+                raise SystemExit("Unblind refused: --campaign is required, so that campaigns "
+                                 "and epochs are never pooled.")
             if pending:
                 raise SystemExit(
                     f"Unblind refused: {len(pending)} trio(s) still pending "
