@@ -1,6 +1,6 @@
 # Agentic irreversible-action incidents, 2025-2026: taxonomy draft
 
-Source data: `incidents.csv` (20 rows). Search log: `search_log_incidents.md`. Searched 2026-11-12.
+Source data: `incidents.csv` (20 rows). Search log: `search_log.md`. Searched 2026-11-12.
 
 ## Scope and evidence
 

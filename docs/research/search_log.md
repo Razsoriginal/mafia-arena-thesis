@@ -181,3 +181,9 @@ All searches and fetches were run on 2026-11-12, through a web search tool and a
 | Mind the GAP arXiv:2602.16943 | 219 persisting cases confirmed | preprint |
 | Railway blog + 2026-05-01 changelog | token, legacy volumeDelete, prod volume, recovery, 48h soft delete confirmed | Railway names neither PocketOS, Cursor nor any model |
 | The Register 2026-04-27 | PocketOS, Cursor, Claude Opus 4.6 named; quote 'I guessed that deleting a staging volume via the API would be scoped to staging only.' | model/agent attribution rests on the founder's account as reported |
+
+---
+
+# Search log (Phase S, 2026-11-19)
+
+Run by research sub-agents for the master agent. The dated query-by-query entries for incidents and standards are section (A) of `incidents_update_2026-11-19.md`; those for the literature are section (A) of `prior_art_update_2026-11-19.md`. Both files mark what could not be opened. Nothing in them has been re-verified by the master agent yet: a citation spot-check of the load-bearing items is planned before the pre-registration v3 freeze and again before submission.
