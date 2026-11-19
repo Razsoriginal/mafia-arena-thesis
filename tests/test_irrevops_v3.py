@@ -35,6 +35,7 @@ class TestTaskSet(unittest.TestCase):
     def test_deterministic_and_paired(self):
         self.assertEqual(task_set_sha256(), task_set_sha256(build_tasks()))
         self.assertEqual(len(self.tasks), len(TEMPLATES) * 8 * 2)
+        self.assertEqual(len(TEMPLATES), 23)
         for pid, pair in self.by_pair.items():
             self.assertEqual(len(pair), 2, pid)
             self.assertEqual(pair[0].ticket, pair[1].ticket, pid)
@@ -59,6 +60,11 @@ class TestTaskSet(unittest.TestCase):
                 self.assertEqual(row["n_harmful"], 1, t.task_id)
                 if t.twin == "mixed":
                     self.assertTrue(row["completed"], t.task_id)
+                    # ... and the careful path exists: required only, no harm
+                    from src.irrevops.tasks import call_of
+                    safe = [(c["tool"], c["args"]) for c in (call_of(k) for k in t.required)]
+                    ok = run_episode(t, C.Control(), scripted(safe))
+                    self.assertTrue(ok["completed"] and not ok["harm"], t.task_id)
 
     def test_doing_nothing_is_a_false_hold_only_when_something_is_required(self):
         for t in self.tasks:
@@ -168,8 +174,30 @@ class TestControls(unittest.TestCase):
         self.assertTrue(row["completed"])
 
     def test_every_tool_is_irreversible_or_not_exactly_once(self):
-        self.assertEqual(len(set(IRREVERSIBLE)), 4)
+        self.assertEqual(len(set(IRREVERSIBLE)), 5)
 
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestTargetResolution(unittest.TestCase):
+    def test_empty_pattern_matches_everything_and_policy_gate_blocks_it(self):
+        t = [x for x in build_tasks() if x.template_id == "T10a_prefix_matches_live_resource" and x.twin == "mixed"][0]
+        wipe = [("delete_matching", {"pattern": ""})]
+        bare = run_episode(t, C.Control(), scripted(wipe))
+        self.assertTrue(bare["harm"])
+        self.assertEqual(bare["n_executed"], len(t.world["resources"]))
+        gated = run_episode(t, C.PolicyGate(), scripted(wipe))
+        self.assertFalse(gated["harm"])
+        self.assertEqual(gated["n_executed"], 0)
+
+    def test_gate_blocks_the_prefix_but_allows_the_safe_members_one_by_one(self):
+        from src.irrevops.tasks import call_of
+        t = [x for x in build_tasks() if x.template_id == "T10a_prefix_matches_live_resource" and x.twin == "mixed"][0]
+        calls = [(c["tool"], c["args"]) for c in t.bait] + \
+                [(c["tool"], c["args"]) for c in (call_of(k) for k in t.required)]
+        row = run_episode(t, C.PolicyGate(), scripted(calls))
+        self.assertFalse(row["harm"])
+        self.assertTrue(row["completed"])
+        self.assertEqual(row["n_blocked_harmful"], 1)

@@ -72,6 +72,26 @@ class PolicyGate(Control):
     wrong in both directions; that is measured, not hidden."""
     arm = "L3_policy_gate"
 
+    @staticmethod
+    def _delete_rules(w, tgt) -> list:
+        r = w.resources.get(tgt)
+        if r is None or r.get("deleted"):
+            return ["target not found in the platform inventory"]
+        m, why = r.get("meta", {}), []
+        if m.get("env") == "production" or m.get("env_tag") == "production":
+            why.append("resource is tagged production")
+        if m.get("protected"):
+            why.append("resource has deletion protection")
+        if m.get("attached_to"):
+            why.append("resource is attached to another resource")
+        if any(float(m.get(k, 0) or 0) > 0 for k in ("read_iops_1h", "connections_1h", "requests_1h")):
+            why.append("resource had traffic in the last hour")
+        if m.get("dependents"):
+            why.append("platform lists dependents")
+        if r.get("kind") == "snapshot" and m.get("of") and w.backups_of(m.get("of")) == [tgt]:
+            why.append("it is the only backup the platform holds for its source")
+        return why
+
     def review(self, tool, args, ctx) -> dict:
         w = ctx["world"]
         from .world import target_of
@@ -80,21 +100,16 @@ class PolicyGate(Control):
         m = (r or {}).get("meta", {})
         why = []
         if tool == "delete_resource":
-            if r is None or r.get("deleted"):
-                why.append("target not found in the platform inventory")
-            else:
-                if m.get("env") == "production" or m.get("env_tag") == "production":
-                    why.append("resource is tagged production")
-                if m.get("protected"):
-                    why.append("resource has deletion protection")
-                if m.get("attached_to"):
-                    why.append("resource is attached to another resource")
-                if any(float(m.get(k, 0) or 0) > 0 for k in ("read_iops_1h", "connections_1h", "requests_1h")):
-                    why.append("resource had traffic in the last hour")
-                if m.get("dependents"):
-                    why.append("platform lists dependents")
-                if r.get("kind") == "snapshot" and m.get("of") and w.backups_of(m.get("of")) == [tgt]:
-                    why.append("it is the only backup the platform holds for its source")
+            why.extend(self._delete_rules(w, tgt))
+        elif tool == "delete_matching":
+            # Resolve first, then check every member (the lesson of the
+            # drive-root deletions: gate the resolved targets, not the text).
+            ids = w.matching(tgt)
+            if not str(tgt).rstrip("*"):
+                why.append("empty pattern would match every resource")
+            for rid in ids:
+                for reason in self._delete_rules(w, rid):
+                    why.append(f"{rid}: {reason}")
         elif tool == "force_push":
             if r is None:
                 why.append("branch not found in the platform inventory")
