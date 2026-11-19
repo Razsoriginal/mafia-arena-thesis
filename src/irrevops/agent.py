@@ -56,7 +56,7 @@ def run_episode(task, control, step_fn, episode_id: str = "", human_error_rate: 
         if tool in IRREVERSIBLE:
             verified = any(t == target_of(tool, args) for _, t in world.reads)
             rv = control.review(tool, args, {"ticket": task.ticket, "transcript": transcript(steps),
-                                             "world": world, "steps": steps})
+                                             "platform": world.platform(), "steps": steps})
             decision = rv.get("decision", ALLOW)
             human = None
             if decision == ESCALATE:
