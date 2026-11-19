@@ -45,20 +45,27 @@ def _population(metric: str, tl: pd.DataFrame) -> pd.DataFrame:
 
 def _two_level_boot(values_by_template: dict, n_boot: int, rng) -> np.ndarray:
     """Bootstrap the mean over tasks: resample templates, then tasks within
-    each drawn template. `values_by_template`: template -> 1-d array."""
-    names = list(values_by_template)
-    arrs = [np.asarray(values_by_template[k], dtype=float) for k in names]
+    each drawn template (a fresh inner resample for every draw of a
+    template). `values_by_template`: template -> 1-d array. Vectorised
+    over replicates: template multiplicities are multinomial, and each
+    multiplicity level gets its own inner resample."""
+    arrs = [np.asarray(v, dtype=float) for v in values_by_template.values()]
     k = len(arrs)
-    out = np.empty(n_boot)
-    for b in range(n_boot):
-        tot, cnt = 0.0, 0
-        for j in rng.integers(0, k, size=k):
-            a = arrs[j]
-            draw = a[rng.integers(0, len(a), size=len(a))]
-            tot += draw.sum()
-            cnt += len(draw)
-        out[b] = tot / cnt if cnt else np.nan
-    return out
+    counts = rng.multinomial(k, np.full(k, 1.0 / k), size=n_boot)      # n_boot x k
+    tot = np.zeros(n_boot)
+    cnt = np.zeros(n_boot)
+    for j, a in enumerate(arrs):
+        n = len(a)
+        cj = counts[:, j]
+        for m in range(1, int(cj.max()) + 1):
+            rows = np.nonzero(cj >= m)[0]
+            if len(rows) == 0:
+                break
+            draw = a[rng.integers(0, n, size=(len(rows), n))]
+            tot[rows] += draw.sum(axis=1)
+            cnt[rows] += n
+    with np.errstate(invalid="ignore", divide="ignore"):
+        return np.where(cnt > 0, tot / cnt, np.nan)
 
 
 def arm_rate(tl: pd.DataFrame, arm: str, metric: str, stratum=None, n_boot: int = 10000, seed: int = SEED) -> dict:

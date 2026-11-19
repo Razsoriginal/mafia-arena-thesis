@@ -39,6 +39,14 @@ def run(cmd, out=None):
             f.write(res.stdout)
 
 
+def _running():
+    try:
+        out = subprocess.run(["pgrep", "-af", "src.irrevops.run"], capture_output=True, text=True).stdout
+    except Exception:
+        return []
+    return [line.split("-m ", 1)[1] for line in out.splitlines() if "-m src.irrevops.run" in line]
+
+
 def ledger():
     sys.path.insert(0, ROOT)
     from src.eval import run_arena as ra
@@ -71,6 +79,12 @@ def main():
         camp = os.path.basename(os.path.dirname(ep))
         if camp.startswith("bridge-"):
             continue  # v2 bridge: closed design, different schema
+        if os.path.exists(os.path.join(os.path.dirname(ep), "DO_NOT_ANALYSE")):
+            print(f"skipping {camp}: marked DO_NOT_ANALYSE")
+            continue
+        if any(p.startswith(f"src.irrevops.run --campaign {camp}") for p in _running()):
+            print(f"skipping {camp}: still running")
+            continue
         run([PY, "-m", "src.irrevops.analysis", "--campaign", camp])
     print("all regenerated")
 
