@@ -17,7 +17,9 @@ def block(**over):
          "arms": ARMS, "reps": [7001, 7002, 7003],
          "backbones": {"A": {"agent_role": None, "realised_model": "m", "monitor_role": "Monitor",
                              "monitor_realised_model": "mm", "t2": 0.6, "t4": 0.7, "l5b_lo": 0.4,
-                             "cal_bare_harm_decidable": 0.2, "cal_bare_harm_undecidable": 0.08}}}
+                             "cal_bare_harm_decidable": 0.2, "cal_bare_harm_undecidable": 0.08,
+                             "cal_informative_templates_decidable": 9,
+                             "cal_informative_templates_undecidable": 2}}}
     b.update(over)
     return b
 

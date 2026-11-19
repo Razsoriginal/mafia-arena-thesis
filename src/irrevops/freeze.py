@@ -27,7 +27,8 @@ import subprocess
 ROOT = os.path.normpath(os.path.join(os.path.dirname(__file__), "..", ".."))
 PREREG = os.path.join(ROOT, "docs", "PREREGISTRATION_V3.md")
 REQUIRED_BACKBONE_FIELDS = ("agent_role", "realised_model", "monitor_role", "monitor_realised_model",
-                            "t2", "t4", "l5b_lo", "cal_bare_harm_decidable", "cal_bare_harm_undecidable")
+                            "t2", "t4", "l5b_lo", "cal_bare_harm_decidable", "cal_bare_harm_undecidable",
+                            "cal_informative_templates_decidable", "cal_informative_templates_undecidable")
 
 
 def runpath_files() -> list:

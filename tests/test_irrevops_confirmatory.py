@@ -15,6 +15,9 @@ HOLD = {"L0_bare": 0.1, "L1_prompt_rule": 0.4, "L2_self_verify": 0.3, "L3_policy
         "L4_monitor": 0.12, "L6_reversibility": 0.1, "L5a_approve_all": 0.1}
 
 
+CAL = {"decidable": 0.5, "undecidable": 0.5, "informative_decidable": 10, "informative_undecidable": 10}
+
+
 def episodes(arms=tuple(HARM), n_templates=20, n_inst=4, rollouts=3, seed=0):
     rng = np.random.default_rng(seed)
     rows = []
@@ -44,7 +47,7 @@ class TestConfirmatory(unittest.TestCase):
     @classmethod
     def setUpClass(cls):
         cls.ep = episodes()
-        cls.res = F.confirmatory(cls.ep, {"decidable": 0.5, "undecidable": 0.5}, n_boot=600, n_perm=2000)
+        cls.res = F.confirmatory(cls.ep, CAL, n_boot=600, n_perm=2000)
 
     def test_the_four_tests_are_the_registered_contrasts_with_the_right_signs(self):
         t = self.res["tests"]
@@ -73,7 +76,7 @@ class TestConfirmatory(unittest.TestCase):
         self.assertIn("By construction", self.res["reversibility_descriptive"]["note"])
 
     def test_floor_rule_keeps_the_family_at_four(self):
-        res = F.confirmatory(self.ep, {"decidable": 0.5, "undecidable": 0.05}, n_boot=300, n_perm=1000)
+        res = F.confirmatory(self.ep, dict(CAL, undecidable=0.05), n_boot=300, n_perm=1000)
         c2 = res["tests"]["C2"]
         self.assertTrue(c2["floored"])
         self.assertEqual(c2["p_holm"], 1.0)
@@ -84,9 +87,20 @@ class TestConfirmatory(unittest.TestCase):
             self.assertFalse(res["tests"][k]["floored"])
         self.assertEqual(len(res["tests"]), len(base))
 
+    def test_too_few_informative_templates_makes_a_harm_test_estimation_only(self):
+        """A sign-flip test over templates cannot reach the first Holm step
+        with fewer than 8 templates that differ (D-016)."""
+        res = F.confirmatory(self.ep, dict(CAL, informative_decidable=5), n_boot=300, n_perm=1000)
+        self.assertTrue(res["tests"]["C1"]["floored"])
+        self.assertEqual(res["tests"]["C1"]["p_holm"], 1.0)
+        self.assertIn("informative", res["tests"]["C1"]["status"])
+        self.assertFalse(res["tests"]["C2"]["floored"])
+        with self.assertRaises(ValueError):
+            F.confirmatory(self.ep, {"decidable": 0.5, "undecidable": 0.5}, 100, 100)
+
     def test_missing_arm_or_floor_input_fails_loudly(self):
         with self.assertRaises(ValueError):
-            F.confirmatory(self.ep[self.ep["arm"] != "L4_monitor"], {"decidable": 0.5, "undecidable": 0.5}, 100, 100)
+            F.confirmatory(self.ep[self.ep["arm"] != "L4_monitor"], CAL, 100, 100)
         with self.assertRaises(ValueError):
             F.confirmatory(self.ep, {"decidable": 0.5}, 100, 100)
 

@@ -22,7 +22,7 @@ Figures are tagged **measured**, **derived** or **assumed**. Items marked **[ope
 }
 -->
 
-The block above is the machine-readable freeze identity. `src/irrevops/freeze.py` parses it. A confirmatory campaign (`ops-<backbone>-<nn>`) starts only if the status is FROZEN, the three hashes equal the current tree, the tag is an ancestor of HEAD, and the run is exactly the frozen arms, repetitions, regime and test split. Thresholds, the monitor and the expected model strings are read from the block, never from the command line. Each backbone entry holds: `agent_role`, `realised_model`, `monitor_role`, `monitor_realised_model`, `t2`, `t4`, `l5b_lo`, `cal_bare_harm_decidable`, `cal_bare_harm_undecidable`.
+The block above is the machine-readable freeze identity. `src/irrevops/freeze.py` parses it. A confirmatory campaign (`ops-<backbone>-<nn>`) starts only if the status is FROZEN, the three hashes equal the current tree, the tag is an ancestor of HEAD, and the run is exactly the frozen arms, repetitions, regime and test split. Thresholds, the monitor and the expected model strings are read from the block, never from the command line. Each backbone entry holds: `agent_role`, `realised_model`, `monitor_role`, `monitor_realised_model`, `t2`, `t4`, `l5b_lo`, `cal_bare_harm_decidable`, `cal_bare_harm_undecidable`, `cal_informative_templates_decidable`, `cal_informative_templates_undecidable`.
 
 ## 1. Question and scope
 
