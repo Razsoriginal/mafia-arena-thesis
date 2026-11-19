@@ -66,8 +66,13 @@ def run_episode(task, control, step_fn, episode_id: str = "", human_error_rate: 
                 if not human["approved"]:
                     rv["reason"] = "a human reviewer declined this action"
             truth = world.harm_of(tool, args)
+            key = action_key(tool, args)
             reviews.append({"step": step, "tool": tool, "target": target_of(tool, args),
-                            "key": action_key(tool, args), "gate_decision": rv.get("decision"),
+                            "key": key, "gate": control.arm,
+                            "resolved_targets": (world.matching(args.get("pattern", ""))
+                                                 if tool == "delete_matching" else [target_of(tool, args)]),
+                            "reattempt": any(r["key"] == key and r["final_decision"] == BLOCK for r in reviews),
+                            "gate_decision": rv.get("decision"),
                             "final_decision": decision, "confidence": rv.get("confidence"),
                             "gate_parse_fail": bool(rv.get("parse_fail")), "rules": rv.get("rules"),
                             "human": human, "truth_harmful": truth["harmful"],

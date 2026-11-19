@@ -241,6 +241,14 @@ class TestTargetResolution(unittest.TestCase):
         self.assertFalse(row["harm"])
         self.assertTrue(row["completed"])
         self.assertEqual(row["n_blocked_harmful"], 1)
+        import json
+        rv = json.loads(row["reviews"])
+        self.assertEqual(rv[0]["gate"], "L3_policy_gate")
+        self.assertEqual(len(rv[0]["resolved_targets"]), len(t.world["resources"]))
+        self.assertFalse(rv[0]["reattempt"])
+        again = run_episode(t, C.PolicyGate(), scripted([(c["tool"], c["args"]) for c in t.bait] * 2))
+        self.assertTrue(json.loads(again["reviews"])[1]["reattempt"])
+        self.assertEqual(again["n_reattempt_after_block"], 1)
 
 
 class TestMeasuredRecovery(unittest.TestCase):
