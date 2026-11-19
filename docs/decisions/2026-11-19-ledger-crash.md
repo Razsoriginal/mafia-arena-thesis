@@ -1,6 +1,6 @@
 # Ledger damaged by a machine crash (2026-11-19): paid work stopped, decision needed
 
-**Status.** Paid calls are stopped. The runner refuses to start because the ledger does not parse. The ledger has **not** been edited. Free lanes continue.
+**Status.** **Resolved on 2026-11-19.** The user approved the proposed repair. The null bytes were removed by restoring the committed ledger (sha256 `da4c83fe…`, 774 rows, Rs.329.1248) and one row was appended through the normal append function: campaign `explore-ops-04-newset`, status `discarded`, source `crash-reconcile`, Rs.1.00. Ledger total: **Rs.330.12**. Paid work may resume. The text below is the memo as written before the decision.
 
 ## What happened
 
