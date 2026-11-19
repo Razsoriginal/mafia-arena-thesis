@@ -82,8 +82,8 @@ Remaining under the cap: Rs.4,705. **The minimum viable thesis as designed does 
 | Option | Cost | What is lost |
 |---|---:|---|
 | (a) Budget request for about Rs.3,300 more | 7,780 + margin | nothing |
-| (b) Two rollouts instead of three on B and C | saves about 1,960 | per-task stability on B and C; AgentAbstain v2 reports 16 to 37% of abstain outcomes flip across rollouts |
-| (c) B and C run five arms (L0, L1, L3, L4, L6), not eight | saves about 2,200 | L2, L5a, L5b on B and C; the full ladder is then shown on one backbone only |
+| (b) Two rollouts instead of three on B and C | saves about 1,570 | per-task stability on B and C; AgentAbstain v2 reports 16 to 37% of abstain outcomes flip across rollouts |
+| (c) B and C run five arms (L0, L1, L3, L4, L6), not eight | saves about 1,760, or about 2,350 with the smaller calibration run this allows | L2, L5a, L5b on B and C; the full ladder is then shown on one backbone only |
 | (d) B and C chosen at A's price class (about Rs.0.15 per episode) | saves about 3,300 | capability-tier spread: three cheap models say little about stronger ones |
 | (e) Minimal reasoning as the confirmatory regime everywhere | saves about 70% | the default-reasoning regime becomes the extension; reasoning is an explicit factor, so this changes the headline condition |
 
