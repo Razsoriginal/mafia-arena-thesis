@@ -34,7 +34,7 @@ Tools: 8 read-only, 2 reversible, 5 irreversible (`delete_resource`, `delete_mat
 
 **Tasks.** Pairs that share the ticket text and differ only in the world. In the **act** twin the requested action is safe and required. In the **abstain** twin it is harmful and nothing is required. In a **mixed** task some actions are required and another is harmful. Harm is computed when an action executes, from the truth layer and the current state, so an agent can make an action safe first (for example by taking a snapshot).
 
-**Families and templates.** 10 families drawn from the incident taxonomy (`docs/research/incidents*.md`); 23 templates at this draft, 8 instances each. **[open]** At the freeze there are at least 30 templates, of which at least 12 are undecidable.
+**Families and templates.** 10 families drawn from the incident taxonomy (`docs/research/incidents*.md`); 23 templates at this draft, 8 instances each. **[open]** At the freeze there are at least 34 templates, of which at least 17 are undecidable (§8).
 
 **Splits**, fixed by instance index and never by outcome: dev (instances 0-1), calibration (2-3), test (4-7). The test split is never run before the freeze; the runner refuses it.
 
@@ -113,7 +113,19 @@ Unit: task. Each task is run with 3 rollouts per arm, backbone and regime; a tas
 
 ## 8. Power and n
 
-**[open]** Simulated from calibration-split variance before the freeze (`scripts/power_sim.py` is extended for the two-level design). Planning values from the dev pilot (**measured**, n = 23 risky tasks per regime, one rollout): bare harm 0.13 to 0.17, bare false hold 0.13 to 0.17. If simulated power for C2 at a 15-point difference is below 0.8 with the frozen template count, either templates are added before the freeze or C2 is declared estimation-only in the freeze block. That choice is made on calibration data only.
+Planning simulation (`scripts/power_sim_v3.py`; 500 simulated studies per cell; 4 test instances and 3 rollouts per template; template effects logit-normal with SD 1.0, task effects SD 0.5, both **assumed**; arms drawn independently given the task, which is conservative; the pre-registered template-level permutation test). Rejection rate under no effect: 0.022.
+
+| Harm rate, arm B → arm A | 6 templates | 12 | 17 | 23 | 30 |
+|---|---:|---:|---:|---:|---:|
+| 0.15 → 0.05 | 0.10 | 0.71 | 0.88 | 0.97 | 0.99 |
+| 0.15 → 0.02 | 0.19 | 0.95 | 1.00 | 1.00 | 1.00 |
+| 0.30 → 0.15 | 0.11 | 0.66 | 0.87 | 0.96 | 0.99 |
+| 0.30 → 0.10 | 0.28 | 0.95 | 1.00 | 1.00 | 1.00 |
+| 0.50 → 0.30 | 0.18 | 0.76 | 0.93 | 0.98 | 1.00 |
+
+Reading (**derived**): the number of templates in a stratum, not the number of episodes, sets the power. Six undecidable templates (this draft) cannot support C2 or C4. Twelve give about 0.7 for a halving-or-better of a 0.15 to 0.30 harm rate; seventeen give about 0.87. The dev pilot measured a bare harm rate of 0.13 to 0.17 (n = 23 risky tasks per regime, one rollout).
+
+**[open]** Before the freeze the simulation is repeated with template and task variance estimated from the calibration split. If power for C2 at the difference "harm rate halved" is below 0.8 with the frozen template count, either templates are added before the freeze or C2 is declared estimation-only in the freeze block. That choice uses calibration data only. Target at the freeze: at least 17 undecidable templates.
 
 ## 9. Backbones and regimes
 
