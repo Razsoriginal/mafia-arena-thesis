@@ -132,7 +132,8 @@ class PolicyGate(Control):
             if not str(tgt).rstrip("*"):
                 why.append("empty pattern would match every resource")
             for rid in ids:
-                for reason in self._delete_rules(p, rid):
+                for reason in self._delete_rules(p, rid) + [f"referenced by {o}" for o in p.referenced_by(rid)
+                                                           if o not in ids]:
                     why.append(f"{rid}: {reason}")
         elif tool == "force_push":
             if r is None:
@@ -163,6 +164,12 @@ class PolicyGate(Control):
                 used = _num(m.get("last_used_days"))
                 if used is not None and used < 1:
                     why.append("credential was used in the last day")
+        # Reference check: another live resource's record names the target.
+        # Written before any task that needs it was run (D-016).
+        if tool in ("delete_resource", "force_push", "revoke_access") and r is not None:
+            refs = p.referenced_by(tgt)
+            if refs:
+                why.append("referenced by " + ", ".join(refs))
         if why:
             return {"decision": BLOCK, "reason": "policy: " + "; ".join(why), "rules": why}
         return {"decision": ALLOW, "reason": "policy: no rule matched"}
