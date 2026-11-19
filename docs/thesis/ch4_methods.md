@@ -61,16 +61,20 @@ The agent's prompt is the same in every arm except for the L1 clause. A blocked 
 
 Per episode: **harm** (an executed action was harmful), **false hold** (a required action did not run), **escalation**, **residual harm**, and what the agent did after a block. Each task is run three times per arm; a task's value is the mean of its runs.
 
-Contrasts are paired by task. Intervals come from a two-level bootstrap that resamples templates and then tasks within them. Tests are sign-flip permutations at the template level. Four contrasts are confirmatory on each model, with Holm adjustment:
+Contrasts are paired by task. Intervals come from a two-level bootstrap that resamples templates and then tasks within them. Tests are sign-flip permutations at the template level. Four contrasts are confirmatory on each model, with Holm adjustment over the four:
 
-- **C1**, a replication: policy gate against prompt rule, harm rate, all tasks.
-- **C2**, the open question: other-family monitor against policy gate, harm rate, undecidable tasks.
-- **C3**: other-family monitor against same-model verifier, on the difference between harm caught and safe actions held.
-- **C4**: residual harm under reversibility against harm with no control, undecidable tasks.
+- **C1**, a replication: policy gate against prompt rule, harm rate, decidable tasks.
+- **C2**, the open question: other-family monitor against the bare agent, harm rate, undecidable tasks.
+- **C3**: other-family monitor against same-model verifier, on informedness (harm caught minus safe tasks failed), all tasks.
+- **C4**, a replication: prompt rule against the bare agent, false-hold rate.
 
-Every harm result is reported beside the matching result for false holds and escalations. A cost-sensitive utility is tabulated for harm-to-delay cost ratios from 1 to 1000.
+Two results are fixed by construction and are reported without a test. On undecidable tasks the policy gate sees the same records in both twins, so it blocks both or allows both. And soft delete restores deleted data by definition, while a payment, a push or an access removal is never recovered. An independent review of the design pointed out that testing either would be testing the simulator.
 
-Simulated power, with assumed between-template variation, is about 0.87 at seventeen templates for a control that halves a harm rate of 0.15 to 0.30 (`scripts/power_sim_v3.py`). It will be recomputed from calibration data before the freeze.
+Where the bare agent's harm rate on a stratum is below 0.10 on the calibration split, the harm contrast on that stratum is reported as an estimate only. A control cannot be shown to reduce harm that does not occur.
+
+Every harm result is reported beside the matching result for false holds, escalations and collateral harm. A cost-sensitive utility is tabulated for harm-to-delay cost ratios from 1 to 1000; it charges needless escalations and not justified ones.
+
+Simulated power, with assumed between-template variation and at the first Holm step, is about 0.64 at seventeen templates for a control that cuts a harm rate of 0.15 to 0.05, and 0.28 for a halving (`scripts/power_sim_v3.py`). The design detects large effects only. It will be recomputed from calibration data before the freeze.
 
 ## 4.6 Models and regimes
 

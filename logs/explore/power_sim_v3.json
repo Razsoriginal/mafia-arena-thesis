@@ -1,0 +1,101 @@
+{
+ "sims": 500,
+ "sd_template": 1.0,
+ "sd_task": 0.5,
+ "type_I_at_0.05_and_0.0125_for_17_18_35_templates": [
+  [
+   0.044,
+   0.014
+  ],
+  [
+   0.028,
+   0.012
+  ],
+  [
+   0.034,
+   0.016
+  ]
+ ],
+ "grid": [
+  {
+   "test": "C1 gate vs prompt rule, harm, decidable",
+   "templates": 18,
+   "rate_b": 0.2,
+   "rate_a": 0.05,
+   "simulated_mean_b": 0.201,
+   "simulated_mean_a": 0.05,
+   "power_alpha_0.05": 0.99,
+   "power_alpha_0.0125": 0.936
+  },
+  {
+   "test": "C1 gate vs prompt rule, harm, decidable",
+   "templates": 18,
+   "rate_b": 0.2,
+   "rate_a": 0.1,
+   "simulated_mean_b": 0.201,
+   "simulated_mean_a": 0.1,
+   "power_alpha_0.05": 0.748,
+   "power_alpha_0.0125": 0.502
+  },
+  {
+   "test": "C2 monitor vs bare, harm, undecidable",
+   "templates": 17,
+   "rate_b": 0.3,
+   "rate_a": 0.15,
+   "simulated_mean_b": 0.302,
+   "simulated_mean_a": 0.151,
+   "power_alpha_0.05": 0.95,
+   "power_alpha_0.0125": 0.786
+  },
+  {
+   "test": "C2 monitor vs bare, harm, undecidable",
+   "templates": 17,
+   "rate_b": 0.15,
+   "rate_a": 0.05,
+   "simulated_mean_b": 0.15,
+   "simulated_mean_a": 0.051,
+   "power_alpha_0.05": 0.848,
+   "power_alpha_0.0125": 0.644
+  },
+  {
+   "test": "C2 monitor vs bare, harm, undecidable",
+   "templates": 17,
+   "rate_b": 0.15,
+   "rate_a": 0.075,
+   "simulated_mean_b": 0.15,
+   "simulated_mean_a": 0.075,
+   "power_alpha_0.05": 0.58,
+   "power_alpha_0.0125": 0.284
+  },
+  {
+   "test": "C2 monitor vs bare, harm, undecidable",
+   "templates": 17,
+   "rate_b": 0.08,
+   "rate_a": 0.04,
+   "simulated_mean_b": 0.081,
+   "simulated_mean_a": 0.041,
+   "power_alpha_0.05": 0.268,
+   "power_alpha_0.0125": 0.078
+  },
+  {
+   "test": "C4 prompt rule vs bare, false hold, all",
+   "templates": 35,
+   "rate_b": 0.1,
+   "rate_a": 0.2,
+   "simulated_mean_b": 0.101,
+   "simulated_mean_a": 0.203,
+   "power_alpha_0.05": 0.988,
+   "power_alpha_0.0125": 0.914
+  },
+  {
+   "test": "C4 prompt rule vs bare, false hold, all",
+   "templates": 35,
+   "rate_b": 0.1,
+   "rate_a": 0.15,
+   "simulated_mean_b": 0.101,
+   "simulated_mean_a": 0.152,
+   "power_alpha_0.05": 0.61,
+   "power_alpha_0.0125": 0.36
+  }
+ ]
+}
