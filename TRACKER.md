@@ -5,16 +5,17 @@
 - **Phase:** E done. S done and spot-checked (twelve load-bearing claims). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run; the runner refuses the test split.
 - **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is a controls ladder on IrrevOps v3 (`src/irrevops/`, 35 templates, 17 undecidable, cue factor on 13). Mafia is an exploratory stress test.
 - **Ledger:** `logs/spend_ledger.jsonl`, **Rs.356.54** of the **Rs.5,000** cap. Repaired once after a machine crash, with the user's approval (`docs/decisions/2026-11-19-ledger-crash.md`). `logs/runs/explore-ops-04-newset` is damaged: never analyse it.
-- **Tests:** 218+ pass (`.venv/bin/python -m unittest discover -s tests`).
+- **Tests:** 291 pass (`.venv/bin/python -m unittest discover -s tests`).
 - **Exploratory campaigns on v3 (dev split, seeds >= 100000):** `explore-ops-00/01/02-minimal/03-arms/05-newset/06-uncued/07-minimal`. Findings D-013 to D-015.
 - **Main open scientific point (D-015):** on backbone A the bare agent is near the harm floor on undecidable tasks, cued or not. Backbones B and C must include a lower capability tier; the floor rule in the draft makes harm contrasts estimation-only where bare harm is under 0.10.
 - **Main open budget point:** three backbones at assumed prices need about Rs.7,780, about Rs.3,080 over what remains (design memo section 6). No option is taken until B and C are priced.
-- **Sub-agent work in flight when this was written:** an independent code review of `src/irrevops/` and a repaired Mafia gate (patch in the session scratchpad). If the session was reset, check `docs/reviews/` and `git log` to see whether they landed.
+- **Independent review (same family) done:** `docs/reviews/2026-11-19-irrevops-v3/` with `response.md`. Open from it: re-review of the confirmatory run path, m11, m12, m17, and three task-validity questions for the human label audit.
+- **Confirmatory family (revised after the review):** C1 L3−L1 harm on decidable; C2 L4−L0 harm on undecidable; C3 L4−L2 informedness; C4 L1−L0 false holds. Gate-on-undecidable and reversibility are descriptive (fixed by construction).
 - **Blocked on the user:** reviewer key (cross-family), keys for backbones B and C, a monitor and a task author, one billing check, and a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).
 - **Next 3 actions:**
-  1. Apply the code-review findings (test first), then run the pilot calibration on backbone A: bare agent and a score-only pass of the same-model verifier on the calibration split, to exercise `calibrate.py` and estimate template variance for power.
-  2. Land the Mafia v3 gate patch after reading it; run a 2-game smoke only if the ledger allows.
-  3. When keys arrive: price B and C with 50-episode dev pilots, write the budget request if needed, run the cross-family review, then freeze.
+  1. Read `pilot-cal-A-01` (bare agent and a score-only verifier pass on the calibration split, one rollout, exploratory): run `python -m src.irrevops.calibrate --campaign pilot-cal-A-01` and re-estimate template variance for `scripts/power_sim_v3.py`.
+  2. When keys arrive: 50-episode dev pilots to price backbones B and C (one from a lower capability tier) and the monitor; budget request if needed; cross-family review including the run path.
+  3. Paraphrase pass by the author model, inert pointers on decidable templates (review m17), one dev run of the paraphrased tickets, then the human label audit, real calibration (3 rollouts) and the freeze.
 
 **Last updated:** 2026-11-19
 **Branch:** `prereg-mvp`
