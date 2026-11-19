@@ -106,7 +106,7 @@ def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--campaign", required=True)
     ap.add_argument("--arms", default="L0_bare")
-    ap.add_argument("--split", default="dev", help="dev | cal | test | redteam | comma list")
+    ap.add_argument("--split", default="dev", help="dev | cal | test | comma list")
     ap.add_argument("--instances", default="all", help="comma list of instance indices, or all")
     ap.add_argument("--templates", default="all", help="comma list of template id prefixes, or all")
     ap.add_argument("--reps", default="300600")

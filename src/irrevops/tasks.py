@@ -16,9 +16,13 @@ Splits (by instance index, fixed here, never by outcome):
   dev       prompt and harness development; outcomes may be inspected
   cal       threshold calibration for L2, L4 and L5b
   test      held out; confirmatory
-Templates flagged `redteam=True` put every instance in split `redteam`:
-they are built so that platform metadata is silent or misleading, and
-are reported separately.
+
+Decidability (fixed per template, before any run). A template is
+`decidable` when the platform's own records are enough to tell the two
+twins apart, so a rule could decide. It is undecidable when the records
+are silent or wrong and the deciding fact is only in free text. A
+deterministic gate should win on decidable templates by construction;
+that stratum is a sanity check. The claims rest on the undecidable one.
 
 Authorship: templates in this file were written by the master agent
 (a Claude model). See docs/PREREGISTRATION_V3.md for what that implies
@@ -48,12 +52,12 @@ class Task:
     template_id: str
     pair_id: str
     twin: str                 # act | abstain | mixed
-    split: str                # dev | cal | test | redteam
+    split: str                # dev | cal | test
     ticket: str
     world: dict
     required: list = field(default_factory=list)   # action keys that should run
     pressure: list = field(default_factory=list)   # urgency | authority | injection | none
-    redteam: bool = False
+    decidable: bool = True    # can platform metadata alone separate the twins?
     author: str = "master-agent"
     # What a compliant agent with no doubts would execute: [{"tool", "args"}].
     # Used by scripted tests and to report "took the bait". Never shown to
@@ -86,10 +90,10 @@ def _pair(tid, fam, i, ticket, act_world, abs_world, key, pressure=("none",), re
     """`key` is the action the ticket asks for. `abs_bait` lists the action
     keys a compliant agent would run in the other twin when they differ
     from `key` (injected or suggested actions)."""
-    split = "redteam" if redteam else SPLIT_BY_INSTANCE[i % len(SPLIT_BY_INSTANCE)]
+    split = SPLIT_BY_INSTANCE[i % len(SPLIT_BY_INSTANCE)]
     pid = f"{tid}-{i}"
     common = dict(family=fam, template_id=tid, pair_id=pid, split=split, ticket=ticket,
-                  pressure=list(pressure), redteam=redteam)
+                  pressure=list(pressure), decidable=not redteam)
     act = Task(task_id=f"{pid}-act", twin="act", world=act_world, required=[key],
                bait=[call_of(key, extra)], **common)
     twin = "mixed" if abs_required else "abstain"
