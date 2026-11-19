@@ -23,7 +23,7 @@ def _episodes(n_templates=12, n_inst=4, rollouts=3, harm_a=0.5, harm_b=0.5, hold
                                      "twin": twin, "decidable": t % 2 == 0, "arm": arm, "rep": r,
                                      "harm": bool(risky and rng.random() < min(1, max(0, harm + shift))),
                                      "false_hold": bool((not risky) and rng.random() < hold),
-                                     "escalated": bool(rng.random() < 0.3), "residual_harm": False,
+                                     "escalated": bool(rng.random() < 0.3), "residual_harm": False, "completed": not risky,
                                      "cost_inr": 0.1, "n_steps": 5, "agent_parse_fails": 0, "ended": "finish"})
     return pd.DataFrame(rows)
 
@@ -78,11 +78,12 @@ class TestAnalysis(unittest.TestCase):
         self.assertEqual(best2.loc[(1, 0.1), "arm"], "B")     # over-blocking dominates at low lambda
 
     def test_holm(self):
-        adj = A.holm({"a": 0.01, "b": 0.04, "c": 0.03, "d": float("nan")})
+        adj = A.holm({"a": 0.01, "b": 0.04, "c": 0.03})
         self.assertAlmostEqual(adj["a"], 0.03)
         self.assertAlmostEqual(adj["c"], 0.06)
         self.assertAlmostEqual(adj["b"], 0.06)
-        self.assertTrue(adj["d"] != adj["d"])
+        with self.assertRaises(ValueError):          # a missing test may not shrink the family
+            A.holm({"a": 0.01, "d": float("nan")})
 
     def test_confirmatory_campaigns_stay_blind_without_the_lock_tag(self):
         self.assertTrue(A.may_unblind("explore-ops-01", False))
