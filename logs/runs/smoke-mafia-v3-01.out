@@ -1,0 +1,10 @@
+[smoke-mafia-v3-01] smoke-mafia-v3-01-100200-gated_village_v3: done, 2 days json_failures=0 status=kept
+[smoke-mafia-v3-01] smoke-mafia-v3-01-100200-cot_village_v3: done, 3 days json_failures=1 status=kept
+[smoke-mafia-v3-01] smoke-mafia-v3-01-100200-nolynch_village_v3: done, 3 days json_failures=0 status=kept
+
+Saved 3 rows to logs/runs/smoke-mafia-v3-01/games.parquet (canonical skipped)
+focal
+cot_village_v3        1
+gated_village_v3      1
+nolynch_village_v3    1
+Run bundle: logs/runs/smoke-mafia-v3-01
