@@ -171,3 +171,78 @@ class TestScoringFixes(unittest.TestCase):
 
 if __name__ == "__main__":
     unittest.main()
+
+
+class TestInfraAndBlinding(unittest.TestCase):
+    def test_M7_agent_provider_failure_aborts_the_episode(self):
+        from src.irrevops.agent import InfraFailure
+        t = task("T1a", "act")
+
+        def step(_s, _u):
+            return {}, True, True            # (reply, parse_fail, provider_failure)
+        with self.assertRaises(InfraFailure):
+            run_episode(t, C.Control(), step)
+
+    def test_M7_unparseable_agent_reply_is_model_behaviour_not_infra(self):
+        t = task("T1a", "act")
+        row = run_episode(t, C.Control(), lambda s, u: ({}, True, False))
+        self.assertEqual(row["ended"], "step_cap")
+        self.assertEqual(row["agent_parse_fails"], 12)
+
+    def test_M7_scorer_provider_failure_is_not_a_block(self):
+        from src.irrevops.agent import InfraFailure
+        t = task("T1a", "act")
+        gate = C.ScoreGate("L2_self_verify", lambda *a: (0.0, {}, True, True), 0.5)
+        with self.assertRaises(InfraFailure):
+            run_episode(t, gate, scripted(bait(t)))
+        gate2 = C.ScoreGate("L2_self_verify", lambda *a: (0.0, {}, True, False), 0.5)   # bad JSON from the model
+        self.assertTrue(run_episode(t, gate2, scripted(bait(t)))["false_hold"])
+
+    def test_M8_confirmatory_console_line_has_no_outcome_or_arm(self):
+        from src.irrevops import run as R
+        row = {"episode_id": "ops-A-01-T1a_stale_env_tag-4-abstain-L3_policy_gate-r7001", "n_steps": 5,
+               "ended": "escalate", "agent_parse_fails": 0}
+        line = R.console_line("ops-A-01", row, 0.12, 17)
+        for banned in ("escalate", "L3_policy_gate", "abstain", "T1a", "steps="):
+            self.assertNotIn(banned, line)
+        self.assertIn("17", line)
+        self.assertIn("ended=escalate", R.console_line("explore-x", row, 0.12, 17))
+
+    def test_M8_unblinding_needs_a_complete_single_version_campaign(self):
+        import pandas as pd
+        from src.irrevops import analysis as A
+        cells = [(t, a, r) for t in ("t1", "t2") for a in ("L0_bare", "L3_policy_gate") for r in (7001, 7002, 7003)]
+        ep = pd.DataFrame([{"task_id": t, "arm": a, "rep": r, "task_set_sha256": "x", "git_sha": "g"} for t, a, r in cells])
+        man = {"n_tasks": 2, "arms": ["L0_bare", "L3_policy_gate"], "reps": [7001, 7002, 7003], "task_set_sha256": "x"}
+        self.assertEqual(A.completeness_problems(ep, man), [])
+        self.assertTrue(A.completeness_problems(ep.iloc[:-1], man))                      # a missing cell
+        mixed = ep.copy()
+        mixed.loc[0, "task_set_sha256"] = "y"
+        self.assertTrue(A.completeness_problems(mixed, man))                             # two task sets
+
+    def test_m8_human_rng_seed_is_stable_across_processes(self):
+        from src.irrevops import run as R
+        self.assertEqual(R.stable_seed(7001, "T1a-4-act"), R.stable_seed(7001, "T1a-4-act"))
+        import subprocess, sys
+        out = subprocess.run([sys.executable, "-c",
+                              "from src.irrevops import run as R; print(R.stable_seed(7001, 'T1a-4-act'))"],
+                             capture_output=True, text=True).stdout.strip()
+        self.assertEqual(int(out), R.stable_seed(7001, "T1a-4-act"))
+
+    def test_m13_m14_episode_rows_are_appended_and_always_valid_json(self):
+        import os
+        import tempfile
+        from src.irrevops import run as R
+        with tempfile.TemporaryDirectory() as td:
+            p = os.path.join(td, "episodes.jsonl")
+            R.append_row(p, {"episode_id": "a", "harm": False})
+            R.append_row(p, {"episode_id": "b", "harm": True})
+            self.assertEqual(R.done_ids(p), {"a", "b"})
+            with open(p, "ab") as f:
+                f.write(b'{"episode_id": "c", "har')           # a torn last line after a crash
+            self.assertEqual(R.done_ids(p), {"a", "b"})
+            self.assertEqual(len(R.read_rows(p)), 2)
+        t = task("T1a", "act")
+        long_step = [("read_doc", {"doc_id": "x" * 5000})] * 11
+        row = run_episode(t, C.Control(), scripted(long_step))
+        json.loads(row["steps"])
