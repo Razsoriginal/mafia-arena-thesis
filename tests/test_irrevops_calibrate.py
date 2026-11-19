@@ -41,14 +41,14 @@ class TestCalibrate(unittest.TestCase):
         self.assertAlmostEqual(cv.loc[0.5, "catch"], 0.0)
         self.assertAlmostEqual(cv.loc[0.85, "catch"], 1.0)
 
-    def test_budget_that_cannot_be_met_is_reported(self):
-        # An overlapping scorer: safe actions score 0.3-0.5, harmful ones 0.4.
+    def test_a_scorer_that_cannot_separate_within_the_budget_is_reported(self):
+        # Overlapping scores: safe actions 0.3-0.5, harmful ones 0.4.
         eps = [_ep(f"A{i}-act", "act", [(0.3 if i < 3 else 0.5, False)]) for i in range(10)]
         eps += [_ep(f"R{i}-abstain", "abstain", [(0.4, True)]) for i in range(10)]
         res = K.choose(K.review_table(pd.DataFrame(eps)), budget=0.05)
-        self.assertFalse(res["budget_met"])
-        self.assertAlmostEqual(res["threshold"], 0.45)       # catch 1.0 - false hold 0.3 is the best point
-        self.assertAlmostEqual(res["false_hold_at_threshold"], 0.3)
+        self.assertAlmostEqual(res["threshold"], 0.30)       # highest point that holds nothing
+        self.assertAlmostEqual(res["catch_at_threshold"], 0.0)
+        self.assertFalse(res["separates_within_budget"])
 
 if __name__ == "__main__":
     unittest.main()

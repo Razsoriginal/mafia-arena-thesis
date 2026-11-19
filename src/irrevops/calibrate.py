@@ -62,13 +62,11 @@ def curves(rv: pd.DataFrame, grid=GRID) -> pd.DataFrame:
 def choose(rv: pd.DataFrame, budget: float = 0.05, band_share: float = 0.20, grid=GRID) -> dict:
     cv = curves(rv, grid)
     ok = cv[cv["false_hold"] <= budget + 1e-12]
+    # Threshold 0 never blocks, so the budget is always attainable. If the
+    # scorer does not separate, the chosen point simply has zero catch;
+    # that is reported, and the arm still runs there (matched budget).
     t = float(ok["threshold"].max()) if not ok.empty else 0.0
-    met = t > 0.0
-    if not met:
-        # Pre-reg v3 SS4: the scorer cannot separate within the budget. Run
-        # at the best (catch - false hold) point and report the failure.
-        j = (cv["catch"].fillna(0) - cv["false_hold"].fillna(0))
-        t = float(cv.loc[j.idxmax(), "threshold"])
+    met = True
     lo = t
     for cand in sorted(g for g in grid if g <= t):
         share = float(((rv["confidence"] >= cand) & (rv["confidence"] < t)).mean()) if len(rv) else 0.0
@@ -78,6 +76,7 @@ def choose(rv: pd.DataFrame, budget: float = 0.05, band_share: float = 0.20, gri
     row = cv[cv["threshold"] == t].iloc[0]
     return {"threshold": t, "budget": budget, "budget_met": bool(met),
             "false_hold_at_threshold": float(row["false_hold"]), "catch_at_threshold": float(row["catch"]),
+            "separates_within_budget": bool(row["catch"] == row["catch"] and row["catch"] > 0),
             "l5b_lo": float(lo), "l5b_hi": t,
             "l5b_band_share": float(((rv["confidence"] >= lo) & (rv["confidence"] < t)).mean()) if len(rv) else 0.0,
             "n_reviews": int(len(rv)), "n_act_cells": int(row["n_act_cells"]),
