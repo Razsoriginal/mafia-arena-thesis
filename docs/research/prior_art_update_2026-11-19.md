@@ -2,6 +2,8 @@
 
 **Provenance.** Compiled on 2026-11-19 by a research sub-agent with web access, on the master agent's brief. Everything here is **[R] reported**: the master agent has read the report but has not re-opened the sources. The "Lvl" column and section (C) say how deeply each source was read; most 2026 papers were read at abstract level only. It supersedes the positioning in `prior_art.md`, `prior_art_abstention.md` and `prior_art_safety.md` where they disagree. A citation spot-check of load-bearing items is required before the pre-registration v3 freeze and before submission.
 
+**Correction (2026-11-19, from `citation_spotcheck_2026-11-19.md`).** Wherever this file says that off-lineage or cross-family monitors "catch 19% vs 41%" (rows for arXiv:2607.06596, section C and section D), read: a monitor *calibrated on a different untrusted-policy family's transcripts* catches fewer attacks. That paper does not compare monitor models from different vendors. Twelve load-bearing claims in this file were re-checked against full text in that spot-check; see it for the exact quotes.
+
 **The positioning this project adopts** (from section D): the study is a replication-plus-extension. Every individual control, the paired should-act / should-abstain design, pre-registration and deterministic scoring are already published. What is still open, stated narrowly: (1) one same-task table across five or more control types; (2) comparison at matched over-blocking; (3) measured, not assumed, undo and escalation; (4) other-family monitors on erroneous (not adversarial) actions; (5) a gate on an irreversible group vote in a hidden-role game, which is exploratory and not evidence for the tool-task claims. No "first" claim is made beyond the wording in section E.13.
 
 ---

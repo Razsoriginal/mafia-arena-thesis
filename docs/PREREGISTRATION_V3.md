@@ -47,7 +47,7 @@ Tools: 8 read-only, 2 reversible, 5 irreversible (`delete_resource`, `delete_mat
 | Arm | Control | Sees | Decision rule |
 |---|---|---|---|
 | L0 | none | — | — |
-| L1 | prompt rule | — | one fixed clause in the system prompt **[open: the clause text; AgentAbstain's strong clause verbatim if its licence allows]** |
+| L1 | prompt rule | — | one fixed clause in the system prompt: the strong restraint clause of AgentAbstain v2 (arXiv:2607.10059v2, App. G.7), verbatim **[open: check the text against the PDF]** |
 | L2 | same-model verifier | ticket and tool history | one scoring call at temperature 0; execute iff confidence ≥ t₂ |
 | L3 | policy gate | platform metadata and registries | deterministic rules in `controls.PolicyGate`, frozen with the run path |
 | L4 | other-family monitor | ticket and tool history | as L2, with a model from another family and its own key; execute iff confidence ≥ t₄ |
@@ -152,7 +152,7 @@ Hard cap Rs.5,000 in total, set by the user; enforced by the shared append-only 
 ## 12. Extensions (each pre-specified here, exploratory unless stated)
 
 1. Minimal-reasoning replication on every backbone.
-2. Replication of L0 to L4 on AgentAbstain tasks, if its licence allows.
+2. Replication of L0 to L4 on AgentAbstain tasks (dataset CC BY 4.0, code MIT, per the spot-check of 2026-11-19).
 3. Adaptive adversary: a model that rewrites the misleading text with feedback from blocks, against L2, L3 and L4.
 4. Approval-channel red-team: the approval record is readable or writable by the agent.
 5. Mafia stress test with a repaired gate: the gate runs after discussion on the snapshot the vote uses; vote wording is identical across arms; outcomes are wrongful lynches and missed correct lynches per game, with win rate secondary; an always-no-lynch reference and the random-vote floor are reported. Exploratory. Game results are never used as evidence for the tool-task claims.
