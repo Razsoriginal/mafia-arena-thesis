@@ -28,9 +28,10 @@ from datetime import datetime, timezone
 
 import pandas as pd
 
-from src.agents.baselines import CotAgent, CotX3Agent, ReactAgent, ConstitutionAgent
+from src.agents.baselines import CotAgent, CotNeutralAgent, CotX3Agent, ReactAgent, ConstitutionAgent
 from src.agents.dmn_tpn_agent import DmnTpnAgent
-from src.agents.null_agents import MajorityFollowerAgent, RandomVoterAgent
+from src.agents.gated_agent import GatedCotAgent
+from src.agents.null_agents import MajorityFollowerAgent, NoLynchAgent, RandomVoterAgent
 from src.config import settings
 from src.llm_client import COST_LOG, BillingExhausted
 from src.llm_client import call_threads as _call_threads, pmap as _pmap
@@ -38,7 +39,10 @@ from src.mafia.engine import Game
 
 AGENTS = {"cot": CotAgent, "react": ReactAgent, "constitution": ConstitutionAgent,
           "dmn_tpn": DmnTpnAgent, "cotx3": CotX3Agent,
-          "random_voter": RandomVoterAgent, "majority_follower": MajorityFollowerAgent}
+          "random_voter": RandomVoterAgent, "majority_follower": MajorityFollowerAgent,
+          "cot_neutral": CotNeutralAgent, "gated_cot": GatedCotAgent,
+          "nolynch": NoLynchAgent}
+NULL_AGENT_CLASSES = (RandomVoterAgent, MajorityFollowerAgent, NoLynchAgent)
 
 TEAM_ARMS = {
     "dmn_village": {"village": "dmn_tpn", "mafia": "cot"},
@@ -46,6 +50,12 @@ TEAM_ARMS = {
     "cotx3_village": {"village": "cotx3", "mafia": "cot"},
     "random_village": {"village": "random_voter", "mafia": "cot"},
     "majority_village": {"village": "majority_follower", "mafia": "cot"},
+    # Mafia stress test, exploratory only (pre-reg v3 SS12.5). Mafia seats
+    # are the same class in every v3 arm; the village differs only by the
+    # verification call before the vote (gated) or by voting at all (nolynch).
+    "gated_village_v3": {"village": "gated_cot", "mafia": "cot_neutral"},
+    "cot_village_v3": {"village": "cot_neutral", "mafia": "cot_neutral"},
+    "nolynch_village_v3": {"village": "nolynch", "mafia": "cot_neutral"},
 }
 
 # AiCredits catalog rates (USD/token) + INR/USD for meta/muse-spark-1.3-contributor.
@@ -116,6 +126,36 @@ PRIMARY_ARMS = ("dmn_village", "cot_village", "cotx3_village")
 NULL_ARMS = ("random_village", "majority_village")
 CONFIRMATORY_SEED_BASE = 5000
 CALIBRATION_TRIOS = 20
+# Exploratory Mafia stress-test arms (pre-reg v3 SS12.5): never confirmatory,
+# only in explore-/pilot-/smoke- campaigns, only on seeds >= 100000.
+V3_STRESS_ARMS = ("gated_village_v3", "cot_village_v3", "nolynch_village_v3")
+V3_NULL_ARMS = ("nolynch_village_v3",)
+V3_CAMPAIGN_PREFIXES = ("explore-", "pilot-", "smoke-")
+V3_MIN_SEED = 100000
+
+
+def _arm_set(args) -> set:
+    return {a.strip() for a in str(getattr(args, "arms", "") or "").split(",") if a.strip()}
+
+
+def _assert_stress_arms(args):
+    """Refuse the v3 stress-test arms outside exploratory campaigns."""
+    if getattr(args, "design", None) != "team":
+        return
+    used = sorted(_arm_set(args) & set(V3_STRESS_ARMS))
+    if not used:
+        return
+    errors = []
+    campaign = getattr(args, "campaign", None) or getattr(args, "run_tag", None) or ""
+    if not str(campaign).startswith(V3_CAMPAIGN_PREFIXES):
+        errors.append(f"campaign must be prefixed {'/'.join(V3_CAMPAIGN_PREFIXES)} "
+                      f"(got {campaign or 'none'!r})")
+    seed = getattr(args, "seed", None)
+    first = None if seed is None else int(seed) + int(getattr(args, "start_trio", 0) or 0) * 100
+    if first is None or int(seed) < V3_MIN_SEED or first < V3_MIN_SEED:
+        errors.append(f"seeds must be >= {V3_MIN_SEED} (got --seed {seed})")
+    if errors:
+        raise SystemExit(f"Exploratory stress-test arms {used} refused: " + "; ".join(errors))
 
 
 def _prompt_hash() -> str:
@@ -284,6 +324,10 @@ def _assert_confirmatory(args):
     arm_set = {a.strip() for a in str(arms_raw).split(",") if a.strip()}
     if not set(PRIMARY_ARMS).issubset(arm_set):
         errors.append(f"confirmatory requires primary arms {list(PRIMARY_ARMS)} (F23)")
+    stress = arm_set & set(V3_STRESS_ARMS)
+    if stress:
+        errors.append(f"confirmatory refuses exploratory stress-test arms {sorted(stress)} "
+                      "(pre-reg v3 SS12.5)")
     extra = arm_set - set(PRIMARY_ARMS) - set(NULL_ARMS)
     if extra:
         errors.append(f"confirmatory arms include unallowed {sorted(extra)} (F23)")
@@ -669,6 +713,9 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
             view = full + _private_note(game, p.pid, det_info)
             if isinstance(ag, DmnTpnAgent):
                 return ag.vote(p.role, view, trust_all[p.pid], traces[p.pid])
+            # Every other agent, GatedCotAgent included, gets the pre-vote
+            # snapshot here; the v3 gate verifies inside vote() and has no
+            # pre-discussion reason() step.
             return ag.vote(p.role, view, {}, prev_majority=prev_majority,
                            seed=game.seed, day=day, alive=alive_ids_at_vote)
 
@@ -681,7 +728,7 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
         if design == "team":
             probed = [p for p in list(game.alive())
                       if game.players[p.pid].role != "mafia"
-                      and not isinstance(agents[p.pid], (RandomVoterAgent, MajorityFollowerAgent))]
+                      and not isinstance(agents[p.pid], NULL_AGENT_CLASSES)]
 
             def _probe(p):
                 view = full + _private_note(game, p.pid, det_info)
@@ -745,6 +792,10 @@ def play_one(seed, focal="dmn_tpn", gate="llm", run_id=None, focal_role="random"
                 "vote_target_is_mafia": _target_is_mafia(v),
                 "samples": info.get("samples"), "sample_parse_fails": info.get("sample_parse_fails"),
                 "n_sample_parse_fails": info.get("n_sample_parse_fails"),
+                # v3 gate (GatedCotAgent): verification output at the action
+                # boundary; None for every seat without a gate.
+                "gate_confidence": info.get("gate_confidence"),
+                "gate_suspect": info.get("gate_suspect"),
             })
         _arm_label = arm or focal
         if design == "team":
@@ -1203,7 +1254,8 @@ def _probe_cost_from_raw(raw_root: str, n_games: int):
 
 def _probed_games(rows) -> int:
     """Games in an LLM village arm; null arms make no probe calls."""
-    return sum(1 for r in rows or [] if str(r.get("arm", "")) not in NULL_ARMS)
+    return sum(1 for r in rows or []
+               if str(r.get("arm", "")) not in NULL_ARMS + V3_NULL_ARMS)
 
 
 def _probe_cost_per_probed_game(raw_root: str, rows):
@@ -1811,6 +1863,7 @@ def main():
     if unknown:
         ap.error(f"unknown ablation(s): {', '.join(sorted(unknown))}")
     _assert_confirmatory(args)
+    _assert_stress_arms(args)
 
     run_tag = args.run_tag or getattr(args, "campaign", None) or time.strftime("%Y%m%d-%H%M%S")
     campaign = getattr(args, "campaign", None) or run_tag

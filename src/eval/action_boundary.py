@@ -47,6 +47,46 @@ def needless_hold_rate_per_game(votes: pd.DataFrame) -> pd.DataFrame:
     return out
 
 
+def _truthy(x) -> bool:
+    return x is True or x == 1 or str(x) == "True"
+
+
+def missed_correct_lynches_per_game(votes: pd.DataFrame) -> pd.DataFrame:
+    """Missed correct lynches per game (master re-evaluation E2.5; pre-reg
+    v3 SS12.5): game-days on which the plurality target among VILLAGE votes
+    was a mafia player and nobody was lynched.
+
+    Only rows with is_village True are counted; mafia voters' votes are
+    ignored, as are "no-lynch" votes. The plurality target must be unique:
+    a day whose top village count is tied has no plurality target and is
+    not counted. Pairs with wrongful lynches: an always-no-lynch village
+    scores 0 on both, a village that agrees on a mafia player and still
+    does not lynch scores here."""
+    rows = []
+    for (gid, seed, arm), g in votes.groupby(["game_id", "requested_seed", "arm"], dropna=False):
+        missed = 0
+        days = 0
+        for _day, grp in g.groupby("day"):
+            days += 1
+            if not _is_none(grp["lynched"].iloc[0]):
+                continue
+            v = grp[[_truthy(x) for x in grp["is_village"]]]
+            v = v[v["vote"].astype(str) != "no-lynch"]
+            if v.empty:
+                continue
+            counts = v["vote"].astype(str).value_counts()
+            if len(counts) > 1 and counts.iloc[0] == counts.iloc[1]:
+                continue
+            target = counts.index[0]
+            tim = v.loc[v["vote"].astype(str) == target, "vote_target_is_mafia"].iloc[0]
+            if _truthy(tim):
+                missed += 1
+        rows.append({"game_id": gid, "requested_seed": seed, "arm": arm,
+                     "missed_correct_lynches": int(missed), "days": int(days)})
+    return pd.DataFrame(rows, columns=["game_id", "requested_seed", "arm",
+                                       "missed_correct_lynches", "days"])
+
+
 def confusion_matrix(votes: pd.DataFrame) -> pd.DataFrame:
     v = votes[votes["is_village"].astype(bool)] if "is_village" in votes.columns else votes
     abst = v["vote"].astype(str) == "no-lynch"
@@ -98,6 +138,8 @@ def per_game_metric(votes: pd.DataFrame, metric: str) -> pd.DataFrame:
         return wrongful_lynches_per_game(votes)
     if metric == "needless_hold_rate":
         return needless_hold_rate_per_game(votes)
+    if metric == "missed_correct_lynches":
+        return missed_correct_lynches_per_game(votes)
     raise ValueError(metric)
 
 

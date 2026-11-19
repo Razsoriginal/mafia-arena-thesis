@@ -67,3 +67,6 @@ logs/spend_ledger.jsonl.lock
 
 # Regenerated on every reproduce_all run
 logs/explore/unittest_last.txt
+
+# Agent worktrees and local tool state
+.claude/

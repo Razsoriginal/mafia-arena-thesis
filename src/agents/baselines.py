@@ -2,6 +2,7 @@
 from src import llm_client as llm
 from src.config import settings
 from src.mafia import prompts as P
+from src.mafia import prompts_v3 as P3
 from .base import BaseAgent
 
 
@@ -22,6 +23,19 @@ class CotAgent(BaseAgent):
     def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
         meta = {}
         d = llm.chat_json(P.VOTE_SYSTEM, P.vote_user(self.pid, role, history, trust), meta=meta, temperature=settings.vote_temperature, purpose="vote")
+        return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
+
+class CotNeutralAgent(CotAgent):
+    """CoT with the neutral vote prompt (Mafia stress test, pre-reg v3 SS12.5).
+
+    Used for the village seats of cot_village_v3 and for the mafia seats of
+    every v3 arm. Speech, night action and probe are CotAgent's.
+    """
+    name = "cot_neutral"
+    def vote(self, role, history, trust, prev_majority=None, seed=None, day=None, alive=None):
+        meta = {}
+        d = llm.chat_json(P3.VOTE_SYSTEM, P3.vote_neutral_user(self.pid, role, history), meta=meta,
+                          temperature=settings.vote_temperature, purpose="vote")
         return str(d.get("vote", "no-lynch")), _vote_info(d, meta)
 
 class CotX3Agent(BaseAgent):

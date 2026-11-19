@@ -32,6 +32,28 @@ class RandomVoterAgent(_NullMixin, BaseAgent):
         return str(opts[0]) if opts else None
 
 
+class NoLynchAgent(_NullMixin, BaseAgent):
+    """Always-no-lynch reference (pre-reg v3 SS12.5): the village never
+    votes for anyone, so its wrongful lynches are 0 by construction and
+    every catchable mafia day is a missed one. No LLM calls."""
+    name = "nolynch"
+
+    def vote(self, role, history, trust, prev_majority=None, seed=None,
+             day=None, alive=None):
+        return "no-lynch", {"reason": "null no-lynch vote", "commitment": "",
+                            "parse_fail": False, "delay_cause": None,
+                            "null_kind": "nolynch"}
+
+    def night_action(self, role, history, alive, options, action):
+        opts = [o for o in options]
+        if action == "save":
+            return str(self.pid) if self.pid in opts else (str(opts[0]) if opts else None)
+        if action == "check":
+            cand = [o for o in opts if int(o) != self.pid]
+            return str(min(cand)) if cand else None
+        return str(opts[0]) if opts else None
+
+
 class MajorityFollowerAgent(_NullMixin, BaseAgent):
     name = "majority_follower"
 
