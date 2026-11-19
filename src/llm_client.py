@@ -4,6 +4,7 @@ Every response is logged to logs/raw/llm_raw.jsonl; retries and parse
 failures go to logs/raw/llm_errors.jsonl so an empty response is auditable
 instead of silently becoming a safe default.
 """
+import hashlib
 import json
 import os
 import random
@@ -17,6 +18,32 @@ from .config import settings
 
 class BillingExhausted(RuntimeError):
     """Raised when the provider reports 402 / insufficient balance."""
+
+
+class ServingDrift(RuntimeError):
+    """The realised model string differs from the frozen one (E7-C1).
+
+    Never retried: the caller leaves the unit of work pending."""
+
+
+# E7-C1 / D-010: the SDK default (2 silent retries, 600 s read timeout) hid
+# two of every three HTTP requests behind one logged attempt. Retries are
+# done here, one logged row per HTTP request.
+SDK_MAX_RETRIES = 0
+try:
+    HTTP_TIMEOUT_S = float(os.getenv("LLM_HTTP_TIMEOUT_S", "120"))
+except ValueError:
+    HTTP_TIMEOUT_S = 120.0
+
+
+def expected_realised_model():
+    """Frozen realised model string, or None when no guard is set."""
+    v = os.getenv("MAFIA_EXPECT_REALISED_MODEL", "").strip()
+    return v or None
+
+
+def prompt_sha256(system: str, user: str) -> str:
+    return hashlib.sha256((system + "\x00" + user).encode("utf-8")).hexdigest()
 
 
 _client = None
@@ -128,7 +155,7 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
              realised_model=None, purpose=None, prompt_tokens=0,
              completion_tokens=0, cost_inr=0.0, cost_estimated: bool = False,
              error=None, latency_s=None, backoff_s=0.0, error_class=None,
-             json_mode=None):
+             json_mode=None, prompt_hash=None, reasoning_tokens=None):
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
@@ -147,6 +174,14 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "purpose": purpose if purpose in PURPOSES else "speak",
         "prompt_tokens": int(prompt_tokens or 0),
         "completion_tokens": int(completion_tokens or 0),
+        # Reasoning vs visible tokens (None when the provider omits the split).
+        "reasoning_tokens": (int(reasoning_tokens) if reasoning_tokens is not None else None),
+        "visible_tokens": (int(completion_tokens or 0) - int(reasoning_tokens)
+                           if reasoning_tokens is not None else None),
+        "prompt_sha256": prompt_hash,
+        "sdk_max_retries": SDK_MAX_RETRIES,
+        "http_timeout_s": HTTP_TIMEOUT_S,
+        "expected_realised_model": expected_realised_model(),
         "cost_inr": float(cost_inr or 0.0),
         "cost_estimated": bool(cost_estimated),
         "error": (str(error)[:300] if error else None),
@@ -195,7 +230,8 @@ def get_client():
     if _client is None:
         with _LOCK:
             if _client is None:
-                _client = OpenAI(base_url=settings.base_url, api_key=settings.api_key)
+                _client = OpenAI(base_url=settings.base_url, api_key=settings.api_key,
+                                 max_retries=SDK_MAX_RETRIES, timeout=HTTP_TIMEOUT_S)
     return _client
 
 
@@ -219,6 +255,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
     # (cap 120 s, jittered); every attempt row records latency, the
     # backoff slept before it, and its error class.
     backoff = 0.0
+    phash = prompt_sha256(system, user)
     for attempt in range(MAX_ATTEMPTS):
         escalated = max_tokens != initial_max_tokens
         t0 = time.time()
@@ -236,6 +273,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             _bump("calls")
             pt = ct = 0
             billed = None
+            rt = None
             try:
                 pt = int(resp.usage.prompt_tokens or 0)
                 ct = int(resp.usage.completion_tokens or 0)
@@ -246,12 +284,20 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                     _bump("cost_inr", float(billed))
             except Exception:
                 pass
+            try:
+                det = getattr(resp.usage, "completion_tokens_details", None)
+                val = getattr(det, "reasoning_tokens", None) if det is not None else None
+                rt = int(val) if val is not None else None
+            except Exception:
+                rt = None
             realised = getattr(resp, "model", None)
             if billed is not None:
                 call_cost, cost_est = float(billed), False
             else:
                 call_cost, cost_est = _est_cost_inr(pt, ct), True
             text = _content(resp)
+            expect = expected_realised_model()
+            drift = bool(expect) and str(realised) != expect
             # One raw row per underlying attempt, written even when the
             # content is empty and the attempt will be retried (G1).
             _log_raw("chat_text", text, temperature=temp,
@@ -261,10 +307,16 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                      completion_tokens=ct, cost_inr=call_cost,
                      cost_estimated=cost_est, latency_s=time.time() - t0,
                      backoff_s=backoff, json_mode=bool(use_format),
-                     error_class=None if text else "empty_content")
+                     prompt_hash=phash, reasoning_tokens=rt,
+                     error_class=("serving_drift" if drift
+                                  else None if text else "empty_content"))
+            if drift:
+                raise ServingDrift(f"realised model {realised!r} != frozen {expect!r}")
             if not text:
                 raise ValueError(f"empty content (max_tokens={max_tokens})")
             return text
+        except ServingDrift:
+            raise
         except Exception as e:
             eclass = _error_class(e)
             if eclass != "empty_content":
@@ -273,7 +325,8 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                          escalated=escalated, realised_model=None,
                          purpose=resolved_purpose, error=e,
                          latency_s=time.time() - t0, backoff_s=backoff,
-                         error_class=eclass, json_mode=bool(use_format))
+                         error_class=eclass, json_mode=bool(use_format),
+                         prompt_hash=phash)
             _log_error("chat_text", e, temperature=temp,
                        max_tokens=max_tokens, attempt=attempt)
             if eclass == "http_402":
