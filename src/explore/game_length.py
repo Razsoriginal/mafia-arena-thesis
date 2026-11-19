@@ -2,13 +2,14 @@
 non-confirmatory histories (no arm comparison). Usage:
 python -m src.explore.game_length"""
 import glob, json, os, re
+from src.explore.blind import is_blind_run
 import pandas as pd
 from src.mafia.engine import Game
 
 rows = []
 for run in sorted(glob.glob("logs/runs/*/")):
     camp = os.path.basename(run.rstrip("/"))
-    if camp.startswith("smoke-team-02"):
+    if camp.startswith("smoke-team-02") or is_blind_run(camp):
         continue
     gp = os.path.join(run, "games.parquet")
     if not os.path.exists(gp):

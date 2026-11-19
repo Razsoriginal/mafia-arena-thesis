@@ -7,6 +7,7 @@ import glob, json, os
 import numpy as np, pandas as pd
 from src.mafia.engine import Game
 from src.eval.stats import auc_score
+from src.explore.blind import is_blind_run
 
 rows = []
 for run in sorted(glob.glob("logs/runs/*/")) + sorted(glob.glob("logs/archive/*/")):
@@ -16,7 +17,7 @@ for run in sorted(glob.glob("logs/runs/*/")) + sorted(glob.glob("logs/archive/*/
     g = pd.read_parquet(gp)
     seed_of = dict(zip(g["game_id"].astype(str), g["seed"]))
     camp = os.path.basename(run.rstrip("/"))
-    if camp.startswith(("smoke-team-02",)) or "confirm" in camp:
+    if camp.startswith(("smoke-team-02",)) or "confirm" in camp or is_blind_run(camp):
         continue
     for f in glob.glob(os.path.join(run, "raw", "trace_*.json")):
         try:
