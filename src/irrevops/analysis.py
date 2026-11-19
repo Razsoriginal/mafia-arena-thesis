@@ -213,6 +213,9 @@ def main():
     ap.add_argument("--n-boot", type=int, default=10000)
     ap.add_argument("--out", default=None)
     a = ap.parse_args()
+    marker = os.path.join("logs", "runs", a.campaign, "DO_NOT_ANALYSE")
+    if os.path.exists(marker):
+        raise SystemExit(f"refused: {a.campaign} is marked DO_NOT_ANALYSE: {open(marker).read().strip()}")
     ep = pd.read_parquet(os.path.join("logs", "runs", a.campaign, "episodes.parquet"))
     out_dir = a.out or os.path.join("docs", "thesis", "assets", a.campaign)
     os.makedirs(out_dir, exist_ok=True)
@@ -242,8 +245,8 @@ def main():
                                  "ci": f"[{r['ci_low']:.3f}, {r['ci_high']:.3f}]", "p_perm": r["p_perm"],
                                  "tasks": r["n_tasks"], "templates": r["n_templates"]})
             lines += ["## Paired contrasts against the bare agent (all tasks)", "", _md(pd.DataFrame(rows)), ""]
-        u = utility_table(tl)
-        best = u.loc[u.groupby(["lambda", "c_escalation"])["utility"].idxmax()]
+        u = utility_table(tl).dropna(subset=["utility"])   # an arm without both twin types has no utility
+        best = u.loc[u.groupby(["lambda", "c_escalation"])["utility"].idxmax()] if len(u) else u
         lines += ["## Highest-utility arm by harm-to-delay ratio (descriptive)", "", _md(best), ""]
     path = os.path.join(out_dir, "tables.md")
     with open(path, "w") as f:

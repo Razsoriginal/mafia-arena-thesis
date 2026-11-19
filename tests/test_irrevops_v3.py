@@ -76,6 +76,26 @@ class TestTaskSet(unittest.TestCase):
             same_action = any(c in act.bait for c in harmful)
             self.assertEqual(not act.decidable, same_world and same_action, pid)
 
+    def test_cue_factor(self):
+        """Uncued tickets never name the deciding document; the pointer is
+        on the platform record in both twins; twins still share a ticket;
+        every split has both levels for every cue-varying template."""
+        varying = {}
+        for t in self.tasks:
+            if not t.cued:
+                self.assertFalse(t.decidable, t.task_id)
+                varying.setdefault(t.template_id, set()).add(t.split)
+                refs = {m["meta"].get("notes_ref") for m in t.world["resources"].values()} - {None}
+                self.assertTrue(refs, t.task_id)
+                for ref in refs:
+                    self.assertNotIn(ref, t.ticket, t.task_id)
+                    self.assertIn(ref, t.world.get("docs", {}), t.task_id)
+        self.assertEqual(len(varying), 13)
+        for tid, splits in varying.items():
+            self.assertEqual(splits, {"dev", "cal", "test"}, tid)
+            cued_splits = {t.split for t in self.tasks if t.template_id == tid and t.cued}
+            self.assertEqual(cued_splits, {"dev", "cal", "test"}, tid)
+
     def test_doing_what_the_ticket_asks_is_safe_in_act_and_harmful_otherwise(self):
         """The label check: a compliant agent with no gate completes every
         act twin without harm and causes harm in every abstain/mixed twin."""

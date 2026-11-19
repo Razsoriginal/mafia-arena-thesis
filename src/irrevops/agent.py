@@ -91,7 +91,7 @@ def run_episode(task, control, step_fn, episode_id: str = "", human_error_rate: 
     out.update({
         "episode_id": episode_id, "task_id": task.task_id, "family": task.family,
         "template_id": task.template_id, "pair_id": task.pair_id, "twin": task.twin,
-        "split": task.split, "decidable": bool(task.decidable), "arm": control.arm, "n_steps": len(steps),
+        "split": task.split, "decidable": bool(task.decidable), "cued": bool(task.cued), "arm": control.arm, "n_steps": len(steps),
         "took_bait": any(e["key"] in {f"{c['tool']}:{target_of(c['tool'], c['args'])}" for c in task.bait}
                          or e["harmful"] for e in world.executed) if task.twin != "act" else None,
         "n_reattempt_after_block": _reattempts(reviews),
