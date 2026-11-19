@@ -43,10 +43,36 @@ def reasoning_effort():
     return v or None
 
 
-def expected_realised_model():
-    """Frozen realised model string, or None when no guard is set."""
-    v = os.getenv("MAFIA_EXPECT_REALISED_MODEL", "").strip()
+def expected_realised_model(role: str | None = None):
+    """Frozen realised model string for the primary backbone, or for a
+    named role (MAFIA_EXPECT_REALISED_MODEL_<ROLE>). None = no guard."""
+    name = "MAFIA_EXPECT_REALISED_MODEL" + (f"_{role.upper()}" if role else "")
+    v = os.getenv(name, "").strip()
     return v or None
+
+
+# Roles other than the primary backbone (E9). One client per role, built
+# from that role's own three variables; never a fallback to another role.
+_role_clients: dict = {}
+# Unbilled calls on another provider are estimated at a deliberately high
+# price so that the ledger can only over-state spend (USD per token).
+_ROLE_EST_IN, _ROLE_EST_OUT = 5e-06, 25e-06
+
+
+def _target(role: str | None) -> dict:
+    """Endpoint, model and client for the primary backbone (role None) or
+    a named role."""
+    if not role:
+        return {"role": "BackboneA", "provider": settings.provider, "base_url": settings.base_url,
+                "model": settings.model, "client": get_client()}
+    from .roles import role_config
+    rc = role_config(role)            # raises RoleNotConfigured; no fallback
+    with _LOCK:
+        if role not in _role_clients:
+            _role_clients[role] = OpenAI(base_url=rc.base_url, api_key=rc.api_key,
+                                         max_retries=SDK_MAX_RETRIES, timeout=HTTP_TIMEOUT_S)
+    return {"role": role, "provider": role, "base_url": rc.base_url, "model": rc.model,
+            "client": _role_clients[role]}
 
 
 def prompt_sha256(system: str, user: str) -> str:
@@ -165,17 +191,20 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
              realised_model=None, purpose=None, prompt_tokens=0,
              completion_tokens=0, cost_inr=0.0, cost_estimated: bool = False,
              error=None, latency_s=None, backoff_s=0.0, error_class=None,
-             json_mode=None, prompt_hash=None, reasoning_tokens=None):
+             json_mode=None, prompt_hash=None, reasoning_tokens=None, target=None):
+    tg = target or {"role": "BackboneA", "provider": settings.provider, "base_url": settings.base_url,
+                    "model": settings.model}
     _log_jsonl("llm_raw.jsonl", {
         "ts": time.time(),
         "run_tag": os.getenv("MAFIA_RUN_TAG", ""),
         "fn": fn,
-        "provider": settings.provider,
-        "model": settings.model,
-        "requested_model": settings.model,
+        "role": tg["role"],
+        "provider": tg["provider"],
+        "model": tg["model"],
+        "requested_model": tg["model"],
         "realised_model": realised_model,
         "resp_model": realised_model,
-        "base_url": settings.base_url,
+        "base_url": tg["base_url"],
         "temperature": temperature,
         "max_tokens": max_tokens,
         "attempt": attempt,
@@ -191,7 +220,7 @@ def _log_raw(fn: str, raw: str, temperature=None, max_tokens=None,
         "prompt_sha256": prompt_hash,
         "sdk_max_retries": SDK_MAX_RETRIES,
         "http_timeout_s": HTTP_TIMEOUT_S,
-        "expected_realised_model": expected_realised_model(),
+        "expected_realised_model": expected_realised_model(None if tg["role"] == "BackboneA" else tg["role"]),
         "reasoning_effort": reasoning_effort(),
         "cost_inr": float(cost_inr or 0.0),
         "cost_estimated": bool(cost_estimated),
@@ -248,10 +277,12 @@ def get_client():
 
 def chat_text(system: str, user: str, temperature: float | None = None,
               log: bool = True, response_format: dict | None = None,
-              purpose: str | None = None, repair: bool = False) -> str:
+              purpose: str | None = None, repair: bool = False, role: str | None = None) -> str:
     # `log` is kept for call compatibility only: every attempt always
     # writes its own raw row (G1). There is no silent log=False path.
-    client = get_client()
+    tg = _target(role)
+    client = tg["client"]
+    tg = {k: v for k, v in tg.items() if k != "client"}
     temp = settings.temp_dialogue if temperature is None else temperature
     use_format = response_format
     max_tokens = settings.max_tokens
@@ -272,7 +303,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
         t0 = time.time()
         try:
             kwargs = {
-                "model": settings.model,
+                "model": tg["model"],
                 "messages": [{"role": "system", "content": system},
                              {"role": "user", "content": user}],
                 "temperature": temp,
@@ -307,9 +338,13 @@ def chat_text(system: str, user: str, temperature: float | None = None,
             if billed is not None:
                 call_cost, cost_est = float(billed), False
             else:
-                call_cost, cost_est = _est_cost_inr(pt, ct), True
+                if role:
+                    call_cost = round((pt * _ROLE_EST_IN + ct * _ROLE_EST_OUT) * _INR_PER_USD * _BILLING_MARKUP, 6)
+                else:
+                    call_cost = _est_cost_inr(pt, ct)
+                cost_est = True
             text = _content(resp)
-            expect = expected_realised_model()
+            expect = expected_realised_model(role)
             drift = bool(expect) and str(realised) != expect
             # One raw row per underlying attempt, written even when the
             # content is empty and the attempt will be retried (G1).
@@ -320,7 +355,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                      completion_tokens=ct, cost_inr=call_cost,
                      cost_estimated=cost_est, latency_s=time.time() - t0,
                      backoff_s=backoff, json_mode=bool(use_format),
-                     prompt_hash=phash, reasoning_tokens=rt,
+                     prompt_hash=phash, reasoning_tokens=rt, target=tg,
                      error_class=("serving_drift" if drift
                                   else None if text else "empty_content"))
             if drift:
@@ -339,7 +374,7 @@ def chat_text(system: str, user: str, temperature: float | None = None,
                          purpose=resolved_purpose, error=e,
                          latency_s=time.time() - t0, backoff_s=backoff,
                          error_class=eclass, json_mode=bool(use_format),
-                         prompt_hash=phash)
+                         prompt_hash=phash, target=tg)
             _log_error("chat_text", e, temperature=temp,
                        max_tokens=max_tokens, attempt=attempt)
             if eclass == "http_402":
@@ -391,7 +426,7 @@ def _parse_json(raw: str):
 
 def chat_json(system: str, user: str, meta: dict | None = None,
               temperature: float | None = None,
-              purpose: str | None = None) -> dict:
+              purpose: str | None = None, role: str | None = None) -> dict:
     """JSON mode with one repair pass. Falls back to {} (safe DELAY).
 
     meta receives parse_fail / repaired / empty_raw / error so callers can
@@ -408,7 +443,7 @@ def chat_json(system: str, user: str, meta: dict | None = None,
     # record (actual realised model, tokens, cost, purpose) (G1/G2).
     raw = chat_text(system + "\nReply with valid JSON only.", user,
                     temperature=first_temp, response_format=json_format,
-                    purpose=purpose)
+                    purpose=purpose, role=role)
     if meta is not None:
         meta["raw_len"] = len(raw)
     if not raw.strip():
@@ -431,7 +466,7 @@ def chat_json(system: str, user: str, meta: dict | None = None,
     # vote-sample; see PREREGISTRATION.md §8 amendment.
     _bump("repairs")
     fix = chat_text(fix_system, fix_user, temperature=0.0,
-                    response_format=json_format, purpose="repair", repair=True)
+                    response_format=json_format, purpose="repair", repair=True, role=role)
     parsed = _parse_json(fix)
     if parsed is not None:
         if meta is not None:
