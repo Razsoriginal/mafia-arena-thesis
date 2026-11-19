@@ -1,0 +1,22 @@
+{
+ "total_inr": 346.2426,
+ "cap_inr": 5000.0,
+ "by_campaign": {
+  "smoke-team-01": 19.4964,
+  "pilot-backfill": 30.9193,
+  "loadtest-500diag": 1.7449,
+  "loadtest-conc-01": 1.8513,
+  "smoke-team-02": 17.6893,
+  "bridge-smoke-01": 0.9296,
+  "loadtest-conc-02": 0.8526,
+  "bridge-smoke-02": 3.5036,
+  "mvp-team-01": 204.5334,
+  "retest-b1": 5.1168,
+  "explore-ops-00": 0.339,
+  "explore-ops-01": 6.4028,
+  "explore-ops-02-minimal": 1.7465,
+  "explore-ops-03-arms": 33.9979,
+  "explore-ops-04-newset": 1.0,
+  "explore-ops-05-newset": 16.1192
+ }
+}

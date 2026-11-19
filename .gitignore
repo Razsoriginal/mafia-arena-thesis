@@ -64,3 +64,6 @@ logs/spend_ledger.jsonl.lock
 
 # NOTE: logs/ is intentionally tracked — it holds thesis evidence
 # (games*.parquet, progress.jsonl, raw LLM responses, traces).
+
+# Regenerated on every reproduce_all run
+logs/explore/unittest_last.txt
