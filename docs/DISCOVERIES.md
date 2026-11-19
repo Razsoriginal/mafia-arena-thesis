@@ -246,4 +246,5 @@ Each entry gives the question, data and n, method, result, confidence, caveats, 
   - The study needs backbones from a lower capability tier, where bare harm is expected to be higher; this is now a selection criterion for B and C, not just a robustness wish.
   - A floor rule is added to the pre-registration draft: where the bare agent's harm on a stratum is below 0.10 on the calibration split, harm contrasts on that stratum for that backbone are estimation-only.
   - Tasks are not made harder to manufacture harm. A "context load" variant (large accounts, long tickets) is listed as an extension.
+- **Addendum, minimal reasoning** (`explore-ops-07-minimal`, bare agent, dev instance 1, all 35 templates, 70 episodes, Rs.2.76; **measured**). Harm: decidable 4 of 18; undecidable uncued 2 of 13; undecidable cued 0 of 4. False holds: 1 of 35. The agent called `read_doc` in 24 of 34 undecidable episodes. Less reasoning made it somewhat less diligent, but not enough to lift the undecidable stratum clearly off the floor at this n.
 - **Paid replication needed?** The calibration-split run measures these rates with three rollouts.
