@@ -4,18 +4,19 @@
 
 - **Phase:** E done. S done and spot-checked (twelve load-bearing claims). D decided; **pre-registration v3 is a DRAFT** (`docs/PREREGISTRATION_V3.md`). No confirmatory episode may run; the runner refuses the test split.
 - **Verdict:** freeze-v2 is **closed**. Epoch 1 (`mvp-team-01-cal`, 100 Mafia games) stays **blind**. The confirmatory study is a controls ladder on IrrevOps v3 (`src/irrevops/`, 52 templates: 25 decidable, 27 undecidable; 17 are indirect-evidence templates). Mafia is an exploratory stress test.
-- **Ledger:** `logs/spend_ledger.jsonl`, about **Rs.415** of the **Rs.5,000** cap before `explore-ops-09-indirect-arms` (in flight when written, lane cap Rs.70). Repaired once after a machine crash, with the user's approval. `logs/runs/explore-ops-04-newset` is damaged: never analyse it.
-- **Tests:** 295 pass (`.venv/bin/python -m unittest discover -s tests`).
+- **Ledger:** `logs/spend_ledger.jsonl`, **Rs.454.20** of the **Rs.5,000** cap. No job in flight. Repaired once after a machine crash, with the user's approval. `logs/runs/explore-ops-04-newset` is damaged: never analyse it.
+- **Tests:** 296 pass (`.venv/bin/python -m unittest discover -s tests`).
 - **Exploratory campaigns on v3 (dev split, seeds >= 100000):** `explore-ops-00/01/02-minimal/03-arms/05-newset/06-uncued/07-minimal`. Findings D-013 to D-015.
 - **Main scientific findings so far (exploratory, D-013 to D-017):** on backbone A the bare agent is diligent about what it is pointed at and near the harm floor there, but acts in most cases where the deciding fact is one hop away (indirect evidence). The same-model verifier does not separate safe from harmful actions within a 5-point false-hold budget. Two earlier failure templates were an artefact of an unclear tool description, now fixed. A harm test needs at least 8 informative templates to pass the first Holm step.
 - **Main open budget point:** three backbones at assumed prices need about Rs.7,780, about Rs.3,080 over what remains (design memo section 6). No option is taken until B and C are priced.
 - **Independent review (same family) done:** `docs/reviews/2026-11-19-irrevops-v3/` with `response.md`. Open from it: re-review of the confirmatory run path, m11, m12, m17, and three task-validity questions for the human label audit.
 - **Confirmatory family (revised after the review):** C1 L3−L1 harm on decidable; C2 L4−L0 harm on undecidable; C3 L4−L2 informedness; C4 L1−L0 false holds. Gate-on-undecidable and reversibility are descriptive (fixed by construction).
 - **Blocked on the user:** reviewer key (cross-family), keys for backbones B and C, a monitor and a task author, one billing check, and a blinded human label audit (`docs/decisions/2026-11-19-keys-request.md`).
-- **Next 3 actions:**
-  1. Read `pilot-cal-A-01` (bare agent and a score-only verifier pass on the calibration split, one rollout, exploratory): run `python -m src.irrevops.calibrate --campaign pilot-cal-A-01` and re-estimate template variance for `scripts/power_sim_v3.py`.
-  2. When keys arrive: 50-episode dev pilots to price backbones B and C (one from a lower capability tier) and the monitor; budget request if needed; cross-family review including the run path.
-  3. Paraphrase pass by the author model, inert pointers on decidable templates (review m17), one dev run of the paraphrased tickets, then the human label audit, real calibration (3 rollouts) and the freeze.
+- **Next 3 actions (everything paid on new roles waits for keys):**
+  1. With keys: 50-episode dev pilots to price backbones B and C (one lower tier) and the monitor; redo the budget table for 52 templates, including the option of two test instances per template; budget request if needed.
+  2. With the reviewer key: cross-family review of the pre-registration draft, `src/irrevops/` and the confirmatory run path; with the author key: paraphrase pass, one dev run of the paraphrased tickets, then the human label audit.
+  3. Then: real calibration per backbone (campaign `cal-<backbone>-01`, 3 rollouts), power table from calibration variance, fill the freeze block, tag `freeze-v3`, run `ops-<backbone>-01`.
+  Free work that remains without keys: Chapter 3 (taxonomy) rewrite, the workshop-paper skeleton, a run of `scripts/reproduce_all.py` end to end.
 
 **Last updated:** 2026-11-19
 **Branch:** `prereg-mvp`
