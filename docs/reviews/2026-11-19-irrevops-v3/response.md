@@ -31,6 +31,6 @@ Reviewer: a separate Claude session with no access to the author's reasoning (sa
 | m14 truncated JSON | Fixed | Outputs clipped per step. |
 | m15 T4b admin counts | Fixed | |
 | m16 pair resampling | Fixed for informedness | Rates over all tasks still resample tasks; conservative per the review. |
-| m17 `notes_ref` marks the stratum | Open | Inert pointers on decidable templates will be added with the paraphrase pass, before the label audit. |
+| m17 `notes_ref` marks the stratum | Fixed | Half of the decidable templates carry a pointer to a neutral note, identical in both twins. |
 | m18 stale text in §8 | Fixed | Section rewritten. |
 | Task validity: T3b act, T5a/T5b uniqueness | Open | Sent to the blinded human label audit. |

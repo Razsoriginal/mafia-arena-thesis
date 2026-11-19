@@ -162,6 +162,21 @@ class TestScoringFixes(unittest.TestCase):
             for key in ('"truth"', '"live"', '"last_admin"', '"frozen"', '"in_scope"', '"valid"', '"blast"'):
                 self.assertNotIn(key, blob, t.task_id)
 
+    def test_m17_a_document_pointer_does_not_mark_the_undecidable_stratum(self):
+        by_t = {}
+        for t in build_tasks():
+            has = any("notes_ref" in r["meta"] for r in t.world["resources"].values())
+            by_t.setdefault((t.template_id, t.decidable), set()).add(has)
+        dec_with = [k for k, v in by_t.items() if k[1] and v == {True}]
+        dec_without = [k for k, v in by_t.items() if k[1] and v == {False}]
+        self.assertGreaterEqual(len(dec_with), 8)
+        self.assertGreaterEqual(len(dec_without), 8)
+        for t in build_tasks():                       # every pointer resolves, in both twins
+            for r in t.world["resources"].values():
+                ref = r["meta"].get("notes_ref")
+                if ref:
+                    self.assertIn(ref, t.world.get("docs", {}), t.task_id)
+
     def test_m15_admin_counts_agree_within_an_account(self):
         for t in build_tasks():
             counts = {r["meta"]["admins_in_account"] for r in t.world["resources"].values()
